@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+
+# Virtual environments
+.venv
+
+# Large local validation data and scratch notebooks
+tests/tcrpmhc_all_catalog-v3.csv
+tests/tmp_*.ipynb
+
+# Derived from IMGT/HLA - kept on storage, not in version control
+src/tcrkit/data/mhc_sequences.csv

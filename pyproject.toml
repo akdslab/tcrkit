@@ -1,0 +1,52 @@
+[project]
+name = "tcrkit"
+version = "0.1.0"
+description = "Shared TCR-processing toolkit: stitch, ANARCI numbering, gene/allele normalization and CDR3 junction repair"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Ali Davari", email = "davari@uchicago.edu" }]
+license = { file = "LICENSE" }
+dependencies = [
+    "pandas>=2.0",
+    # >=1.3 required, not just preferred: 1.3 renamed get_imgt_data -> get_ref_data and
+    # gave stitchr.stitch() three more arguments plus a dict return. tcrkit targets that API.
+    "stitchr>=1.3",
+    "anarci>=1.3",
+    "pyhmmer>=0.10",
+    "tidytcells>=2.1",
+    "mhcgnomes>=1.8",
+    "tqdm>=4.65",
+]
+
+[project.scripts]
+tcrkit = "tcrkit.cli:main"
+
+[project.optional-dependencies]
+# Repertoire metrics. Split out because these are heavy: olga pulls in
+# numba/llvmlite, tcrdist3 and scikit-bio pull in scipy/statsmodels/h5py - a lot of
+# weight for users who only want the sequence wrappers.
+metrics = ["olga>=1.2", "tcrdist3>=0.2", "scikit-bio>=0.6"]
+# Kept in sync with [dependency-groups].dev below, so `pip install -e '.[dev]'`
+# gets the same tooling `uv sync` does.
+dev = ["pytest>=8.0", "ipykernel>=6.29", "nbformat>=5.10", "nbconvert>=7.16",
+       # ipywidgets: without it tqdm warns "IProgress not found" under Jupyter
+       "ipywidgets>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tcrkit"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "ipywidgets>=8.1.9",
+    "nbconvert>=7.17.1",
+    "nbformat>=5.11.1",
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
