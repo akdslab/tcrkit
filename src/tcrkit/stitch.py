@@ -388,8 +388,8 @@ def stitch(v, j=None, cdr3=None, chain=None, species=None, col_mapping=None,
             engine only).
         batch_size: rows per chunk when `max_workers` > 1.
         progress_bar: show a tqdm bar (only for more than one row).
-        squeeze: return the plain result instead of a frame - a dict for one
-            rearrangement, a DataFrame without the input echo for several.
+        squeeze: return the plain result instead of a frame - a Series (the row) for
+            one rearrangement, a DataFrame without the input echo for several.
         **engine_kwargs: passed to the chosen engine, e.g. ``thimble_bin=``,
             ``extra_genes=``, ``seamless=`` for ``engine='thimble'``.
 

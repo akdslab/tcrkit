@@ -45,13 +45,23 @@ from pathlib import Path
 
 import pandas as pd
 
-from ._util import ERROR_COL, collect, is_empty, progress, squeeze as _squeeze
+from ._util import (ERROR_COL, collapse_columns, collect, is_empty, progress, segments,
+                    squeeze as _squeeze)
 
-__all__ = ['anarci', 'CDR_IMGT_LOCS', 'ERROR_ROW', 'read_sequences', 'backend']
+__all__ = ['anarci', 'CDR_IMGT_LOCS', 'IMGT_REGIONS', 'COLLAPSIBLE', 'ERROR_ROW',
+           'read_sequences', 'backend']
 
 
 #: CDR positions in the IMGT numbering scheme.
 #: https://www.imgt.org/IMGTScientificChart/Nomenclature/IMGT-FRCDRdefinition.html
+#: IMGT V-domain regions, inclusive position ranges (insertions such as 111A are in the
+#: range of their number).
+IMGT_REGIONS = {'FR1': (1, 26), 'CDR1': (27, 38), 'FR2': (39, 55), 'CDR2': (56, 65),
+                'FR3': (66, 104), 'CDR3': (105, 117), 'FR4': (118, 129)}
+
+#: The per-residue columns :func:`anarci` can `collapse` on.
+COLLAPSIBLE = ('region',)
+
 CDR_IMGT_LOCS = {
     'cdr1': (27, 38),
     'cdr2': (56, 65),
@@ -71,6 +81,10 @@ ERROR_ROW = {
 _DROP_COLS = ['id', 'description', 'evalue', 'bitscore', 'bias', 'scheme']
 
 _backend = None
+
+
+class _NoVDomain(ValueError):
+    """ANARCI found no domain to number; reported without the exception type."""
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +225,9 @@ def _extract_cdrs(df_numbered, df_alignment_details=None, cdr_locs=None):
 
 def _prepare(anarci_output, include_imgt_index=False):
     """One sequence's ANARCI output as a single-row frame."""
+    if all(n is None for n in anarci_output[1]):
+        raise _NoVDomain('no V domain found: not a TCR or antibody chain? (with allow=, '
+                         'also check the chain types allowed)')
     df_align = _alignment_details_to_df(anarci_output)
     df_num = _numbered_to_df(anarci_output)
     if len(df_num) == 0:
@@ -310,9 +327,9 @@ def _number(items, progress_bar=True, include_imgt_index=False, separate_index=F
         except Exception as e:
             if raise_error:
                 raise
-            df_sample = pd.DataFrame({**ERROR_ROW,
-                                      ERROR_COL: f'{type(e).__name__}: {e}'
-                                      if str(e) else ERROR_ROW[ERROR_COL]},
+            message = (str(e) if isinstance(e, _NoVDomain) else
+                       f'{type(e).__name__}: {e}' if str(e) else ERROR_ROW[ERROR_COL])
+            df_sample = pd.DataFrame({**ERROR_ROW, ERROR_COL: message},
                                      index=[sid])
         results.append(df_sample)
 
@@ -321,9 +338,41 @@ def _number(items, progress_bar=True, include_imgt_index=False, separate_index=F
         df = separate_imgt_index(_expand_imgt_index(df))
     return df.fillna('-')
 
+def _imgt_region(label) -> str:
+    """The IMGT V-domain region of a position label: ``'FR1'`` ... ``'FR4'``, or ``''``."""
+    m = re.match(r'^(\d+)', str(label))
+    if m is None:
+        return ''
+    n = int(m.group(1))
+    return next((name for name, (lo, hi) in IMGT_REGIONS.items() if lo <= n <= hi), '')
+
+
+def _per_residue(inp: pd.DataFrame, numbered: pd.DataFrame) -> pd.DataFrame:
+    """One row per residue of each input sequence, with its IMGT label and region."""
+    parts = []
+    for idx, seq in zip(inp.index, inp['sequence']):
+        seq = '' if is_empty(seq) else str(seq)
+        imgt = ['-'] * len(seq)
+        row = numbered.loc[idx] if idx in numbered.index else None
+        if row is not None and isinstance(row.get('imgt_dict'), dict):
+            start = int(row['query_start'])            # 0-based, as ANARCI reports it
+            for k, label in enumerate(row['imgt_dict']):
+                if 0 <= start + k < len(seq):
+                    imgt[start + k] = str(label)
+        chain = row['chain_type'] if row is not None else '-'
+        part = pd.DataFrame({'position': range(1, len(seq) + 1), 'aa': list(seq),
+                             'chain_type': chain, 'imgt': imgt,
+                             'region': [_imgt_region(x) if x != '-' else '' for x in imgt]},
+                            index=[idx] * len(seq))
+        parts.append(part)
+    cols = ['position', 'aa', 'chain_type', 'imgt', 'region']
+    return pd.concat(parts) if parts else pd.DataFrame(columns=cols)
+
+
 def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=False,
            separate_index=False, mute=True, raise_error=False, use_pyhmmer=None,
-           squeeze: bool = False, **anarci_kwargs) -> pd.DataFrame:
+           squeeze: bool = False, per_residue: bool = False, collapse=None,
+           **anarci_kwargs) -> pd.DataFrame:
     """IMGT-number protein sequences. Returns one row per input sequence.
 
     >>> out = anarci('MNAGVTQTPKFRVLKTGQSMTLLCAQDMNHDYMYWYRQDPGMGLRLIHYSVGEGTTAKGE'
@@ -353,13 +402,22 @@ def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=Fa
             letter, so the IMGT axis can be sliced numerically. Returns the numbering
             frame alone, without the input echo, since those two header rows do not
             correspond to input sequences.
+        per_residue: one row per residue of each sequence instead: ``position``
+            (1-based), ``aa``, ``chain_type``, ``imgt`` (the IMGT label, ``'-'``
+            outside the V domain) and ``region`` (``'FR1'``, ``'CDR1'``, ... ``'FR4'``,
+            :data:`IMGT_REGIONS`; ``''`` outside the V domain).
+        collapse: one row per *segment* instead: a run of consecutive residues sharing
+            the value of this per-residue column - ``'region'`` gives FR1, CDR1, ...
+            FR4 with their ``start`` / ``end`` (1-based), ``length``, ``imgt_start`` /
+            ``imgt_end`` and ``sequence``. ``True`` means ``'region'``. Implies
+            `per_residue`.
         mute: keep ANARCI's own stdout/stderr chatter quiet.
         raise_error: re-raise instead of returning an error row for a sequence that
             cannot be numbered.
         use_pyhmmer: force the in-process pyhmmer backend on (True) or off (False).
             ``None`` (default) auto-detects. Only affects the process's first call.
-        squeeze: return the plain result instead of a frame - a dict for one sequence,
-            a DataFrame without the ``sequence`` echo for several.
+        squeeze: return the plain result instead of a frame - a Series (the row)
+            for one sequence, a DataFrame without the ``sequence`` echo for several.
         **anarci_kwargs: forwarded to ``anarci.run_anarci``. The important one is
             ``allow``: pass ``allow={'A', 'B'}`` for alpha/beta TCRs (or ``{'G', 'D'}``
             for gamma/delta), otherwise an alpha chain can come back assigned to the
@@ -376,6 +434,21 @@ def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=Fa
     """
     inp = collect(('sequence',), (sequences,), col_mapping=col_mapping)
     items = list(zip(inp.index, inp['sequence']))
+
+    collapse = collapse_columns(collapse, COLLAPSIBLE, default='region')
+    if collapse is not None:
+        per_residue = True
+    if per_residue:
+        if separate_index:
+            raise ValueError('per_residue / collapse and separate_index are different '
+                             'layouts of the numbering; pick one.')
+        out = _number(items, progress_bar=progress_bar, include_imgt_index=True,
+                      mute=mute, raise_error=raise_error, use_pyhmmer=use_pyhmmer,
+                      **anarci_kwargs)
+        res = _per_residue(inp, out)
+        if collapse is not None:
+            res = segments(res, collapse)
+        return _squeeze(res) if squeeze else res
 
     out = _number(items, progress_bar=progress_bar,
                   include_imgt_index=include_imgt_index or separate_index,

@@ -232,3 +232,57 @@ def test_tcrdist_long_form():
 def test_tcrdist_missing_column_says_which():
     with pytest.raises(ValueError, match='beta_cdr3'):
         tcrkit.tcrdist(TCRS.drop(columns=['beta_cdr3']))
+
+
+# ---------------------------------------------------------------------------
+# command line
+# ---------------------------------------------------------------------------
+
+def _repertoires_csv(tmp_path):
+    path = tmp_path / 'reps.csv'
+    pd.DataFrame({'sample': ['x', 'x', 'y', 'y'], 'cdr3': ['A', 'B', 'A', 'B'],
+                  'count': [10, 5, 100, 50]}).to_csv(path, index=False)
+    return str(path)
+
+
+@has_skbio
+def test_cli_diversity(tmp_path, capsys):
+    from tcrkit.cli import main
+
+    assert main(['diversity', 'A', 'A', 'A', 'B', 'C', '--json']) == 0
+    assert '"n_clones": 3' in capsys.readouterr().out
+    assert main(['diversity', '--in-csv', _repertoires_csv(tmp_path), '--by', 'sample']) == 0
+    out = capsys.readouterr().out
+    assert ' x ' in out and ' y ' in out
+
+
+def test_cli_morisita_horn(tmp_path, capsys):
+    from tcrkit.cli import main
+
+    reps = _repertoires_csv(tmp_path)
+    assert main(['morisita-horn', '--in-csv', reps, '--by', 'sample', '--long',
+                 '--json']) == 0
+    assert '"morisita_horn": 1.0' in capsys.readouterr().out   # same shape, 10x depth
+    with pytest.raises(SystemExit, match='--other-csv'):
+        main(['morisita-horn', '--in-csv', reps])
+    with pytest.raises(SystemExit, match="--clone-col 'nope'"):
+        main(['morisita-horn', '--in-csv', reps, '--by', 'sample', '--clone-col', 'nope'])
+
+
+@has_olga
+def test_cli_generation_probability(capsys):
+    from tcrkit.cli import main
+
+    assert main(['generation-probability', '--cdr3', 'CASSIRSSYEQYF', '--json']) == 0
+    assert '"log10_pgen"' in capsys.readouterr().out
+
+
+def test_cli_missing_extra_is_a_message_not_a_traceback(monkeypatch, capsys):
+    import tcrkit.metrics
+    from tcrkit.cli import main
+
+    def boom(*a, **k):
+        raise tcrkit.metrics._missing('olga')
+    monkeypatch.setattr(tcrkit.metrics, 'generation_probability', boom)
+    assert main(['generation-probability', '--cdr3', 'CASSIRSSYEQYF']) == 1
+    assert "pip install 'tcrkit[metrics]'" in capsys.readouterr().err

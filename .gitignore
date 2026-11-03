@@ -13,6 +13,3 @@ wheels/
 # Large local validation data and scratch notebooks
 tests/tcrpmhc_all_catalog-v3.csv
 tests/tmp_*.ipynb
-
-# Derived from IMGT/HLA - kept on storage, not in version control
-src/tcrkit/data/mhc_sequences.csv

@@ -591,8 +591,8 @@ def normalize_mhc(alleles, paired: bool = False, chain: str | None = None,
         enforce_one_allele: raise if a string resolves to multiple alleles.
         col_mapping: where the allele lives when the input is a frame or records, e.g.
             ``{'allele': 'mhc'}``.
-        squeeze: return the plain result instead of a frame - a dict for one allele, a
-            DataFrame without the ``allele_input`` echo for several.
+        squeeze: return the plain result instead of a frame - a Series (the row)
+            for one allele, a DataFrame without the ``allele_input`` echo for several.
         **kwargs: forwarded per allele - ``restrict_allele_fields`` (how many fields to
             keep, 2 -> A*02:01), ``drop_mutations``, ``fix_chain_order``.
 

@@ -376,7 +376,7 @@ def squeeze(out: pd.DataFrame, echo=()):
     columns, then
 
     * one row, one result column   -> the scalar
-    * one row, several columns     -> a dict
+    * one row, several columns     -> that row, as a Series (``r['x']`` or ``r.x``)
     * many rows, one column        -> a Series
     * otherwise                    -> the DataFrame unchanged
 
@@ -386,10 +386,55 @@ def squeeze(out: pd.DataFrame, echo=()):
     res = out.drop(columns=[c for c in echo if c in out.columns])
     if len(res) == 1:
         row = res.iloc[0]
-        return row.iloc[0] if res.shape[1] == 1 else row.to_dict()
+        return row.iloc[0] if res.shape[1] == 1 else row
     if res.shape[1] == 1:
         return res.iloc[:, 0]
     return res
+
+
+def segments(residues: pd.DataFrame, by) -> pd.DataFrame:
+    """Collapse a per-residue table into runs of consecutive residues sharing `by`.
+
+    What ``collapse=`` does in :func:`tcrkit.anarci` and :func:`tcrkit.annotate_mhc`.
+    `residues` needs ``position``, ``aa`` and ``imgt`` columns and is indexed by input
+    id, one row per residue in order. Returns one row per run: the `by` columns,
+    ``start`` / ``end`` (1-based, inclusive), ``length``, ``imgt_start`` / ``imgt_end``
+    (first and last IMGT label in the run, None if it has none) and ``sequence``.
+    """
+    by = list(by)
+    cols = [*by, 'start', 'end', 'length', 'imgt_start', 'imgt_end', 'sequence']
+    rows, index = [], []
+    for idx in dict.fromkeys(residues.index):
+        res = residues.loc[[idx]]
+        key = res[by].astype(str).agg('\x1f'.join, axis=1)
+        run = (key != key.shift()).cumsum()
+        for _, seg in res.groupby(run.to_numpy(), sort=True):
+            numbered = [x for x in seg['imgt'] if x != '-']
+            rows.append({**{c: seg[c].iloc[0] for c in by},
+                         'start': int(seg['position'].iloc[0]),
+                         'end': int(seg['position'].iloc[-1]),
+                         'length': len(seg),
+                         'imgt_start': numbered[0] if numbered else None,
+                         'imgt_end': numbered[-1] if numbered else None,
+                         'sequence': ''.join(seg['aa'])})
+            index.append(idx)
+    return pd.DataFrame(rows, index=index, columns=cols)
+
+
+def collapse_columns(collapse, allowed, default) -> list[str] | None:
+    """Validate a ``collapse=`` argument: a column name or a list of them, from `allowed`.
+
+    ``True`` means `default`; ``False`` / ``None`` mean no collapsing (None is returned).
+    """
+    if collapse is None or collapse is False:
+        return None
+    if collapse is True:
+        collapse = default
+    cols = [collapse] if isinstance(collapse, str) else list(collapse)
+    bad = [c for c in cols if c not in allowed]
+    if bad or not cols:
+        raise ValueError(f'collapse takes columns from {tuple(allowed)}, got {bad or cols}')
+    return cols
 
 
 # Values that mean 'not reported' in the sources these wrappers read.

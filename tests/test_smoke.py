@@ -101,7 +101,7 @@ def test_squeeze_gives_the_bare_value():
                                      squeeze=True)) == ['TRBV20-1', 'TRAV23/DV6']
     assert tcrkit.add_cdr3_junctions('ASSYSGNTEAF', 'TRBJ1-1',
                                squeeze=True) == 'CASSYSGNTEAFF'
-    assert isinstance(tcrkit.normalize_mhc('A*0201', squeeze=True), dict)
+    assert isinstance(tcrkit.normalize_mhc('A*0201', squeeze=True), pd.Series)
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +280,15 @@ def test_anarci_allow_none_does_not_restrict():
     r = tcrkit.anarci(BETA_AA, allow=None).iloc[0]
     assert r['error'] == '-'
     assert r['chain_type'] == 'B'
+
+
+def test_anarci_says_when_a_sequence_is_not_a_tcr():
+    """A non-TCR (here the start of HLA-A2) is an error row that says why."""
+    hla = 'GSHSMRYFFTSVSRPGRGEPRFIAVGYVDDTQFVRFDSDAASQRMEPRAPWIEQEGPEYWDGETRKV'
+    out = tcrkit.anarci({'tcr': BETA_AA, 'hla': hla}, allow={'A', 'B'})
+    assert out.loc['tcr', 'error'] == '-'
+    assert out.loc['hla', 'error'].startswith('no V domain found: not a TCR')
+    assert out.loc['hla', 'chain_type'] == '-'
 
 
 def test_anarci_works_without_an_hmmscan_binary():
@@ -489,11 +498,11 @@ def test_normalize_mhc_raise_is_the_default():
 
 needs_mhc_ref = pytest.mark.skipif(
     not bundled_mhc_table_path().exists(),
-    reason='mhc_sequences.csv is not in version control - see tcrkit.pmhc.load_mhc_table')
+    reason='the bundled mhc_sequences.csv is missing - see tcrkit.pmhc.load_mhc_table')
 
 
 def test_missing_mhc_reference_raises_with_instructions(tmp_path):
-    with pytest.raises(FileNotFoundError, match='not distributed with the source'):
+    with pytest.raises(FileNotFoundError, match='No MHC sequence reference at'):
         load_mhc_table(tmp_path / 'absent.csv')
 
 
@@ -555,17 +564,89 @@ def test_mhc_sequence_finds_a_species_tagged_b2m_on_its_own():
 @needs_mhc_ref
 def test_mhc_sequence_full_is_longer_than_the_domain():
     short = tcrkit.mhc_sequence('A*0201')['sequence'][0]
-    full = tcrkit.mhc_sequence('A*0201', full=True)['sequence'][0]
-    assert full.startswith(short) and len(full) > len(short)
+    full = tcrkit.mhc_sequence('A*0201', region='full')['sequence'][0]
+    assert short in full and len(full) > len(short)   # full adds the leader and tails
 
 
 @needs_mhc_ref
 def test_mhc_reference_has_the_expected_shape():
     tab = load_mhc_table()
-    assert len(tab) == 251
-    assert {'allele', 'sequence', 'full_sequence', 'gene', 'mhc_class',
-            'species'} <= set(tab.columns)
+    assert len(tab) == 186                     # one table for lookup and detection
+    assert {'allele', 'sequence', 'gene', 'mhc_class', 'species', 'prediction',
+            'topology_from', 'outside_spans', 'in_detect'} <= set(tab.columns)
     assert tab['allele'].is_unique
+    assert tab['prediction'].notna().all()     # every allele carries a topology
+
+
+@needs_mhc_ref
+@pytest.mark.parametrize('region, length, regions', [
+    ('full', 365, 'signal_peptide, extracellular, transmembrane, cytoplasmic'),
+    ('signal_peptide', 24, 'signal_peptide'),
+    ('mature', 341, 'extracellular, transmembrane, cytoplasmic'),
+    ('extracellular', 283, 'extracellular'),
+    ('transmembrane', 25, 'transmembrane'),
+    ('cytoplasmic', 33, 'cytoplasmic'),
+])
+def test_mhc_sequence_regions(region, length, regions):
+    out = tcrkit.mhc_sequence('A*0201', region=region)
+    assert len(out['sequence'][0]) == length
+    # the summary names exactly what came back, not what the allele is made of
+    assert out['regions'][0] == regions
+
+
+@needs_mhc_ref
+def test_mhc_sequence_region_strips_the_signal_peptide():
+    full = tcrkit.mhc_sequence('H2-Db', region='full')['sequence'][0]
+    signal = tcrkit.mhc_sequence('H2-Db', region='signal_peptide')['sequence'][0]
+    mature = tcrkit.mhc_sequence('H2-Db', region='mature')['sequence'][0]
+    assert full.startswith(signal) and full == signal + mature
+
+
+@needs_mhc_ref
+def test_mhc_sequence_reports_where_the_regions_fall():
+    out = tcrkit.mhc_sequence('H2-Db', region='full').iloc[0]
+    assert (out['signal_peptide'], out['extracellular'], out['transmembrane'],
+            out['cytoplasmic']) == ('1-24', '25-307', '308-331', '332-362')
+    # the whole chain is the signal peptide plus the mature chain, nothing else
+    assert out['length'] == 24 + len(tcrkit.mhc_sequence(
+        'H2-Db', region='mature')['sequence'][0])
+    # ... and the spans are renumbered inside whatever was returned
+    mature = tcrkit.mhc_sequence('H2-Db', region='mature').iloc[0]
+    assert mature['extracellular'] == '1-283'
+    assert mature['signal_peptide'] is None       # cleaved off, so not in this sequence
+
+
+@needs_mhc_ref
+@pytest.mark.parametrize('alias, canonical', [
+    ('signal', 'signal_peptide'), ('ectodomain', 'extracellular'),
+    ('tm', 'transmembrane'), ('inside', 'cytoplasmic'),
+])
+def test_mhc_sequence_accepts_region_synonyms(alias, canonical):
+    assert (tcrkit.mhc_sequence('H2-Db', region=alias)['sequence'][0]
+            == tcrkit.mhc_sequence('H2-Db', region=canonical)['sequence'][0])
+
+
+@needs_mhc_ref
+def test_mark_regions_labels_every_residue():
+    out = tcrkit.mhc_sequence('A0101', region='full', mark_regions=True).iloc[0]
+    assert len(out['topology_seq']) == len(out['sequence'])
+    assert out['topology_seq'].startswith('S' * 24 + 'O')
+    assert set(out['topology_seq']) == set('SOMI')
+    # and it tracks whatever region was asked for
+    mature = tcrkit.mhc_sequence('A0101', region='mature', mark_regions=True).iloc[0]
+    assert 'S' not in mature['topology_seq']
+    assert len(mature['topology_seq']) == len(mature['sequence'])
+
+
+@needs_mhc_ref
+def test_mhc_sequence_has_no_topology_seq_unless_asked():
+    assert 'topology_seq' not in tcrkit.mhc_sequence('A0101').columns
+
+
+@needs_mhc_ref
+def test_mhc_sequence_rejects_an_unknown_region():
+    with pytest.raises(ValueError, match='region must be one of'):
+        tcrkit.mhc_sequence('A*0201', region='nonsense')
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +781,8 @@ def test_cli_entry_point_builds():
 
     parser = build_parser()
     for cmd in ('stitch', 'anarci', 'normalize-tcr', 'normalize-mhc',
-                'add-cdr3-junctions'):
+                'add-cdr3-junctions', 'annotate-mhc',
+                'diversity', 'morisita-horn', 'generation-probability'):
         assert parser.parse_args([cmd]).command == cmd
 
 
@@ -824,3 +906,33 @@ def test_build_tcr_pmhc_takes_your_own_mhc_table():
 def test_build_tcr_pmhc_needs_at_least_one_chain():
     with pytest.raises(ValueError, match='No chain found'):
         tcrkit.build_tcr_pmhc(pd.DataFrame([{'epitope': 'GILGFVFTL'}]))
+
+
+# ---------------------------------------------------------------------------
+# anarci per residue / collapsed into regions
+# ---------------------------------------------------------------------------
+
+def test_anarci_per_residue_covers_the_whole_sequence():
+    res = tcrkit.anarci(ALPHA_AA, allow={'A', 'B'}, per_residue=True)
+    assert len(res) == len(ALPHA_AA)
+    assert ''.join(res['aa']) == ALPHA_AA
+    assert list(res['position']) == list(range(1, len(ALPHA_AA) + 1))
+    assert res.loc[res['imgt'] == '104', 'aa'].item() == 'C'      # the conserved Cys
+
+
+def test_anarci_collapse_region_agrees_with_the_cdr_columns():
+    summary = tcrkit.anarci(ALPHA_AA, allow={'A', 'B'}).iloc[0]
+    seg = tcrkit.anarci(ALPHA_AA, allow={'A', 'B'}, collapse='region').set_index('region')
+    assert list(seg.index[:7]) == ['FR1', 'CDR1', 'FR2', 'CDR2', 'FR3', 'CDR3', 'FR4']
+    for cdr in ('CDR1', 'CDR2', 'CDR3'):
+        assert seg.loc[cdr, 'sequence'] == summary[f'{cdr}_aa']
+        assert seg.loc[cdr, 'start'] == summary[f'{cdr}_aa_start']
+        assert seg.loc[cdr, 'end'] == summary[f'{cdr}_aa_end']
+    # the segments tile the sequence
+    assert ''.join(tcrkit.anarci(ALPHA_AA, allow={'A', 'B'}, collapse='region')['sequence']) \
+        == ALPHA_AA
+
+
+def test_anarci_collapse_rejects_unknown_columns():
+    with pytest.raises(ValueError, match='collapse takes'):
+        tcrkit.anarci(ALPHA_AA, collapse='topology')

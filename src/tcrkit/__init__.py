@@ -1,16 +1,18 @@
 """tcrkit - shared TCR-processing toolkit for the group.
 
-Five capabilities, all re-exported here:
+The capabilities, all re-exported here:
 
     stitch          build a full TCR nt/aa sequence from V/J calls + CDR3   (Stitchr)
     anarci          annotate V/J/CDR regions of a protein sequence          (ANARCI)
     normalize_tcr   standardize TCR gene/allele names to IMGT               (tidytcells)
     normalize_mhc   standardize HLA/MHC allele names                        (mhcgnomes)
     mhc_sequence    look up an MHC allele's protein sequence                (reference table)
+    annotate_mhc    an MHC chain's gene, IMGT numbering and groove helices  (HLA + IMGT G-DOMAIN)
     add_cdr3_junctions  put the IMGT junction residues back on a CDR3    (reference table)
 
-They live in five modules: ``stitch``, ``anarci``, ``normalize`` (allele *names*),
-``pmhc`` (an allele to its *sequence*) and ``cdr3_junction``.
+They live in these modules: ``stitch``, ``anarci``, ``normalize`` (allele *names*),
+``pmhc`` (an allele to its *sequence*), ``mhc`` (an MHC sequence to its gene, IMGT
+numbering and helices, on top of ``gdomain``) and ``cdr3_junction``.
 
 :mod:`tcrkit.tcr_pmhc` assembles whole complexes from the lot;
 :mod:`tcrkit.metrics` adds repertoire-level measures on top - :func:`diversity`
@@ -42,7 +44,7 @@ residues will not stitch, so repair it first and then stitch::
                                                       'j': 'j_call'})['cdr3_fixed']
     out = tcrkit.stitch(df, chain='beta')
 
-The same five are available from the command line::
+All but mhc_sequence are also command-line subcommands::
 
     tcrkit stitch --v TRBV19 --j TRBJ2-7 --cdr3 CASSIRSSYEQYF
     tcrkit --help
@@ -54,9 +56,10 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.0'
+__version__ = '0.1.4'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
+from .mhc import annotate_mhc
 from .cdr3_junction import (
     add_cdr3_junctions,
     build_junction_table,
@@ -65,7 +68,8 @@ from .cdr3_junction import (
 )
 from .metrics import diversity, generation_probability, morisita_horn, tcrdist
 from .normalize import genes_match, mhc_chain_of, normalize_mhc, normalize_tcr, to_gene
-from .pmhc import bundled_mhc_table_path, load_mhc_table, mhc_sequence
+from .pmhc import bundled_mhc_table_path, list_mhc, load_mhc_table, mhc_sequence
+from .display import print_residues
 from .tcr_pmhc import build_tcr_pmhc
 from .stitch import DEFAULT_CONSTANT, stitch, stitch_pair
 
@@ -80,7 +84,11 @@ __all__ = [
     # 4. normalize_mhc
     'normalize_mhc', 'mhc_chain_of',
     # pMHC sequences
-    'mhc_sequence', 'load_mhc_table', 'bundled_mhc_table_path',
+    'mhc_sequence', 'load_mhc_table', 'list_mhc', 'bundled_mhc_table_path',
+    # printing a sequence with its annotation
+    'print_residues',
+    # MHC chains: gene, IMGT numbering, groove helices
+    'annotate_mhc',
     # 5. cdr3 junctions
     'add_cdr3_junctions', 'junction_of', 'load_junction_table',
     'build_junction_table',
