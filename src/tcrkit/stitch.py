@@ -293,7 +293,7 @@ def _anarci_annotate(seqs, chain, cdr3=None, cols=ANARCI_COLS, progress_bar=Fals
     return out
 
 
-_RESULT_KEYS = ('sequence', 'sequence_aa', ERROR_COL, 'stitchr_warnings')
+_RESULT_KEYS = ('sequence_nt', 'sequence_aa', ERROR_COL, 'stitchr_warnings')
 
 
 # ==========================================================================================
@@ -313,14 +313,15 @@ def _stitch_record(v, j, cdr3, chain='beta', species='human', no_leader=False,
     except Exception as e:
         return {**res, ERROR_COL: str(e),
                 'stitchr_warnings': getattr(e, 'stitchr_warnings', '-')}
-    return {**res, 'sequence': nt, 'sequence_aa': aa, 'stitchr_warnings': warned}
+    return {**res, 'sequence_nt': nt, 'sequence_aa': aa, 'stitchr_warnings': warned}
 
 
 def stitch(v, j=None, cdr3=None, chain=None, species=None, col_mapping=None,
            no_leader=False, constant=None, mute=True, engine='stitchr',
            run_anarci=False, anarci_cols=ANARCI_COLS, anarci_kwargs=None,
            max_workers=1, batch_size=500, progress_bar=True,
-           squeeze: bool = False, **engine_kwargs) -> pd.DataFrame:
+           squeeze: bool = False, include_nt: bool = False,
+           **engine_kwargs) -> pd.DataFrame:
     """Rebuild full-length TCR sequences from V/J calls + CDR3.
 
     Returns one row per rearrangement, whether you passed one or a million.
@@ -390,6 +391,7 @@ def stitch(v, j=None, cdr3=None, chain=None, species=None, col_mapping=None,
         progress_bar: show a tqdm bar (only for more than one row).
         squeeze: return the plain result instead of a frame - a Series (the row) for
             one rearrangement, a DataFrame without the input echo for several.
+        include_nt: also return the stitched nucleotides, as ``sequence_nt``.
         **engine_kwargs: passed to the chosen engine, e.g. ``thimble_bin=``,
             ``extra_genes=``, ``seamless=`` for ``engine='thimble'``.
 
@@ -400,8 +402,8 @@ def stitch(v, j=None, cdr3=None, chain=None, species=None, col_mapping=None,
         ================  ======================================================
         column            meaning
         ================  ======================================================
-        sequence          stitched nucleotides, '-' if it failed
-        sequence_aa       its translation, '-' if it failed
+        sequence_aa       the stitched chain, '-' if it failed
+        sequence_nt       its nucleotides, only with ``include_nt=True``
         error             '-' on success, else the error message
         stitchr_warnings  what Stitchr warned about, ' | '-joined, '-' if quiet
         ================  ======================================================
@@ -443,7 +445,7 @@ def stitch(v, j=None, cdr3=None, chain=None, species=None, col_mapping=None,
     elif max_workers > 1 and len(inp) > batch_size:
         func = partial(stitch, chain=chain, species=species, no_leader=no_leader,
                        constant=constant, mute=mute, progress_bar=False,
-                       run_anarci=False, **engine_kwargs)
+                       run_anarci=False, include_nt=True, **engine_kwargs)
         inp = inp.assign(chain=chains, species=speciess)   # carry them into the batches
         batches = [inp.iloc[i:i + batch_size] for i in range(0, len(inp), batch_size)]
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
@@ -473,6 +475,8 @@ def stitch(v, j=None, cdr3=None, chain=None, species=None, col_mapping=None,
             ann.loc[~ok, 'error_anarci'] = 'not stitched'
         res = res.join(ann)
 
+    if not include_nt:
+        res = res.drop(columns='sequence_nt')
     return _squeeze(res, inp.columns) if squeeze else res
 
 
@@ -489,9 +493,10 @@ def _stitch_via_thimble(inp, chain, species, constant=None, **kwargs):
     out = stitch_pair(
         frame, chains=pair, species=species,
         col_mapping={f'{chain}_{f}': f'{chain}_{f}' for f in _REQUIRED_COLS},
-        constant=None if constant is None else {chain: constant}, **kwargs)
+        constant=None if constant is None else {chain: constant}, include_nt=True,
+        **kwargs)
     return pd.DataFrame({
-        'sequence': out[f'{chain}_sequence'],
+        'sequence_nt': out[f'{chain}_sequence_nt'],
         'sequence_aa': out[f'{chain}_sequence_aa'],
         ERROR_COL: out[ERROR_COL],
         'stitchr_warnings': out['thimble_log'],
@@ -544,7 +549,8 @@ def _thimble_col(df: pd.DataFrame, col: str) -> list:
 def stitch_pair(df, col_mapping, chains=('alpha', 'beta'), species='human',
                  constant=None, leader=None, extra_genes=False, seamless=False,
                  thimble_bin=None, in_file=None, out_file=None, work_dir=None,
-                 keep_files=False, extra_args=(), verbose=False):
+                 keep_files=False, extra_args=(), verbose=False, squeeze: bool = False,
+                 include_nt: bool = False):
     """Stitch a whole frame in one `thimble` subprocess, returned indexed like `df`.
 
     Both chains of a pair go in together, which is the point of this over
@@ -587,10 +593,13 @@ def stitch_pair(df, col_mapping, chains=('alpha', 'beta'), species='human',
             `work_dir` puts the unnamed ones in a directory of your choosing, or
             `keep_files=True` keeps the temp dir and prints the two paths.
         verbose: print the command and thimble's output.
+        squeeze: return the plain result instead of a frame - a Series (the row) for a
+            one-row `df`.
+        include_nt: also return each chain's nucleotides, as ``{chain}_sequence_nt``.
 
     Returns:
-        A DataFrame indexed like `df` with, per chain, ``{chain}_sequence`` /
-        ``{chain}_sequence_aa`` ('-' when that chain didn't stitch), plus:
+        A DataFrame indexed like `df` with, per chain, ``{chain}_sequence_aa`` ('-' when
+        that chain didn't stitch; ``{chain}_sequence_nt`` too with `include_nt`), plus:
             error           '-' when every requested chain stitched, else thimble's
                             message
             thimble_log     thimble's raw Warnings/Errors, kept even on success - it is
@@ -702,7 +711,7 @@ def stitch_pair(df, col_mapping, chains=('alpha', 'beta'), species='human',
 
     out = {}
     for ch, locus in zip(chains, loci):
-        for suffix, field in (('sequence', f'{locus}_nt'), ('sequence_aa', f'{locus}_aa')):
+        for suffix, field in (('sequence_nt', f'{locus}_nt'), ('sequence_aa', f'{locus}_aa')):
             out[f'{ch}_{suffix}'] = [(stitched.get(n, {}).get(field) or '').strip() or '-'
                                      for n in names]
     # thimble reports notes and failures in the one field ('[None]' when it has nothing
@@ -711,7 +720,7 @@ def stitch_pair(df, col_mapping, chains=('alpha', 'beta'), species='human',
     log = ['' if m.lower() in ('[none]', 'none') else m for m in log]
     errors = []
     for i, name in enumerate(names):
-        if all(out[f'{ch}_sequence'][i] != '-' for ch in requested):
+        if all(out[f'{ch}_sequence_nt'][i] != '-' for ch in requested):
             errors.append('-')
         elif log[i]:
             errors.append(log[i])
@@ -722,4 +731,7 @@ def stitch_pair(df, col_mapping, chains=('alpha', 'beta'), species='human',
                           if name in stitched else 'dropped by thimble')
     out[ERROR_COL] = errors
     out['thimble_log'] = [m or '-' for m in log]
-    return pd.DataFrame(out, index=df.index)
+    res = pd.DataFrame(out, index=df.index)
+    if not include_nt:
+        res = res.drop(columns=[f'{ch}_sequence_nt' for ch in chains])
+    return _squeeze(res) if squeeze else res

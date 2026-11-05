@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.5 - 2026-11-04
+
+- **Stitched nucleotides are opt-in and renamed**: `sequence` → `sequence_nt`
+  (`{chain}_sequence_nt`), returned only with `include_nt=True` on `stitch`,
+  `stitch_pair` and `build_tcr_pmhc` (CLI `--include-nt`).
+- `squeeze=` on `to_gene`, `stitch_pair` and `build_tcr_pmhc`.
+- New `imgt_regions`: the IMGT ranges behind `region` / `helix`, with sources.
+- `print_residues(color=...)`: residues and a line coloured by its values.
+
 ## 0.1.4 - 2026-11-03
 
 - **MHC sequences now come from UniProt**: 186 alleles, each identical to its entry; 65

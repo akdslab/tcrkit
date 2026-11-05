@@ -28,7 +28,7 @@ import warnings
 
 import pandas as pd
 
-from ._util import ERROR_COL, species_of
+from ._util import ERROR_COL, species_of, squeeze as _squeeze
 
 __all__ = ['build_tcr_pmhc', 'TCR_FIELDS']
 
@@ -54,7 +54,8 @@ def _chain_columns(df, col_mapping, chain):
 
 
 def build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True,
-                   keep=None, mhc_table=None, progress_bar=True) -> pd.DataFrame:
+                   keep=None, mhc_table=None, progress_bar=True,
+                   squeeze: bool = False, include_nt: bool = False) -> pd.DataFrame:
     """Build full TCR-pMHC sequences from gene calls and MHC alleles.
 
     >>> raw = pd.DataFrame([{'alpha_v': 'TRAV1-2', 'alpha_j': 'TRAJ33',
@@ -86,6 +87,10 @@ def build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True,
             sequence columns are left empty (with a warning) rather than raising, so the
             TCR half of the build still happens.
         progress_bar: show progress for the stitching and numbering passes.
+        squeeze: for a one-row `df`, return that row as a Series. Every column is kept,
+            the input ones too, since several of them come back cleaned.
+        include_nt: also return each chain's stitched nucleotides, as
+            ``{chain}_sequence_nt``.
 
     Returns:
         A DataFrame indexed like `df`, with your input columns first, then per chain:
@@ -95,8 +100,8 @@ def build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True,
         ======================  ==================================================
         {chain}_v, _j           the IMGT-standardized calls actually used
         {chain}_cdr3            the CDR3 actually stitched, junction completed
-        {chain}_sequence        stitched nucleotides
-        {chain}_sequence_aa     its translation
+        {chain}_sequence_aa     the stitched chain
+        {chain}_sequence_nt     its nucleotides, only with ``include_nt=True``
         {chain}_anarci_v, _j    what ANARCI independently read back
         {chain}_cdr3_ok         did ANARCI recover the CDR3 that went in?
         ======================  ==================================================
@@ -167,9 +172,11 @@ def build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True,
         st = stitch(pd.DataFrame({'v': out[f'{chain}_v'].values,
                                   'j': out[f'{chain}_j'].values,
                                   'cdr3': out[f'{chain}_cdr3'].values}),
-                    chain=chain, species=row_species, progress_bar=progress_bar)
+                    chain=chain, species=row_species, progress_bar=progress_bar,
+                    include_nt=include_nt)
         note(st[ERROR_COL].ne('-'), f'{chain} did not stitch')
-        out[f'{chain}_sequence'] = st['sequence'].values
+        if include_nt:
+            out[f'{chain}_sequence_nt'] = st['sequence_nt'].values
         out[f'{chain}_sequence_aa'] = st['sequence_aa'].values
 
     # 4. MHC -> both chains of the heterodimer and their sequences
@@ -221,4 +228,4 @@ def build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True,
 
     out[ERROR_COL] = [' | '.join(p) if p else '-' for p in problems]
     out['ok'] = [not p for p in problems]
-    return out
+    return _squeeze(out) if squeeze else out

@@ -20,7 +20,9 @@ tcrkit.build_tcr_pmhc(df)                                 # all steps, self-chec
 ```
 
 - `stitch` needs `stitchrdl -s human` once; it repairs nothing - run
-  `add_cdr3_junctions` first. `chain=` is not inferred (default beta).
+  `add_cdr3_junctions` first. `chain=` is not inferred (default beta). Output is
+  `sequence_aa`; `include_nt=True` adds `sequence_nt` (also on `stitch_pair`,
+  `build_tcr_pmhc` as `{chain}_sequence_nt`).
 - `anarci`: if looking for alpha/beta chains pass `allow={'A','B'}`, else an alpha
   chain can come back as delta. `CDR3_aa` is IMGT 105-117 (no C/F).
 - `normalize_tcr`: a valid but wrong `species` silently changes the gene; leave it unset.

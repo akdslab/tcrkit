@@ -56,7 +56,7 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc
@@ -70,6 +70,7 @@ from .metrics import diversity, generation_probability, morisita_horn, tcrdist
 from .normalize import genes_match, mhc_chain_of, normalize_mhc, normalize_tcr, to_gene
 from .pmhc import bundled_mhc_table_path, list_mhc, load_mhc_table, mhc_sequence
 from .display import print_residues
+from .imgt import imgt_regions
 from .tcr_pmhc import build_tcr_pmhc
 from .stitch import DEFAULT_CONSTANT, stitch, stitch_pair
 
@@ -85,8 +86,8 @@ __all__ = [
     'normalize_mhc', 'mhc_chain_of',
     # pMHC sequences
     'mhc_sequence', 'load_mhc_table', 'list_mhc', 'bundled_mhc_table_path',
-    # printing a sequence with its annotation
-    'print_residues',
+    # printing a sequence with its annotation, and the IMGT ranges behind it
+    'print_residues', 'imgt_regions',
     # MHC chains: gene, IMGT numbering, groove helices
     'annotate_mhc',
     # 5. cdr3 junctions

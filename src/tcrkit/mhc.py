@@ -1,44 +1,11 @@
 """MHC chains: their gene, IMGT numbering and groove helices.
 
-One capability, :func:`annotate_mhc`, the MHC counterpart of :func:`tcrkit.anarci`::
+:func:`annotate_mhc` is the MHC counterpart of :func:`tcrkit.anarci`; :func:`best_mhc`,
+:func:`mhc_span` and :func:`mhc_chain` are the gene matching behind it, for one sequence.
 
-    annotate_mhc(seq)                          # one row per sequence: gene, domains, helix
-    annotate_mhc(seq, per_residue=True)        # one row per residue: IMGT label, helix
-    annotate_mhc({'A2': seq_a2, 'DRB1': seq_drb1})     # any collection, as everywhere
-
-and the gene matching behind it, for one sequence::
-
-    best_mhc(seq)                    # ('A', 'A0201', 0.53): gene, allele, score per residue
-    mhc_span('GGGGSGGGGS' + seq)     # (10, 192): where the MHC part is, without the tag
-    mhc_chain('DRB1')                # 'beta': which chain of the molecule a gene codes for
-
-Each sequence is first matched to the bundled HLA and B2M sequences
-(:func:`best_mhc`) for its gene and closest allele.
-
-The gene call is reliable; the allele is approximate. The bundled database holds 184
-alleles (human class I and II, HLA-E/G, a few mouse H2 and B2M), a small fraction of
-the tens of thousands of known HLA alleles, so ``allele`` is the *closest of these*, not
-a typing result. ``allele_identity`` says how close: 1.0 means your sequence is identical
-to that allele over the part that aligns (other alleles may still be identical there
-too, for example ones that differ only outside the groove), and anything lower means
-the true allele is not bundled. The gene says which
-groove domains (G domains) the chain has: G-ALPHA1 and G-ALPHA2 for a class I heavy
-chain, G-ALPHA for a class II alpha chain, G-BETA for a class II beta chain, none for
-B2M. Those are numbered on IMGT's G-DOMAIN scheme (:func:`tcrkit.gdomain.number_gdomains`):
-strands A-D (positions 1-49) and the helix (50-92B), with insertions such as ``'61A'``.
-An IMGT position means the same place in every allele. A sequence that matches no gene
-is still numbered, trying all four domains.
-
-The ``helix`` column marks the groove-helix residues that TCR docking angles are measured
-on, by one of :data:`HELIX_METHODS`:
-
-- ``'imgt'`` (default): fixed IMGT positions (:data:`tcrkit.gdomain.HELIX`), so the same
-  residues in every allele: HLA-A2 50-86 and 140-176, HLA-DR alpha 46-78, beta 54-64
-  and 67-91. They are part of IMGT's helix region (50-92B), not all of it.
-- ``'tpm-bench'``: the helix ranges of the closest MHC Motif Atlas gene
-  (http://mhcmotifatlas.org), carried over by sequence alignment, as the tpm-bench
-  benchmark does. The same residues as ``'imgt'`` on class I; on class II the ends
-  differ by a few residues, gene by gene.
+Numbering follows IMGT's G-DOMAIN scheme, numbered on the templates of
+https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/G-DOMAIN/Gdomains.html
+(Lefranc et al., *Dev. Comp. Immunol.* 29, 917-938, 2005).
 """
 
 from __future__ import annotations
@@ -395,6 +362,10 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
                  squeeze: bool = False, collapse=None) -> pd.DataFrame:
     """Which MHC gene each sequence is, its IMGT numbering and its groove helices.
 
+    Each sequence is matched to the bundled alleles for its gene and closest allele, then
+    its G domains are numbered on IMGT's G-DOMAIN scheme:
+    https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/G-DOMAIN/Gdomains.html
+
     >>> out = annotate_mhc('GSHSMRYFFTSVSRPGRGEPRFIAVGYVDDTQFVRFDSDAASQRMEPRAPWIEQEG'
     ...                    'PEYWDGETRKVKAHSQTHRVDLGTLRGYYNQSEAGSHTVQRMYGCDVGSDWRFLRGY'
     ...                    'HQYAYDGKDYIALKEDLRSWTAADMAAQTTKHKWEAAHVAEQLRAYLEGTCVEWLRR'
@@ -403,58 +374,32 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
     ['A', 'A0201', 'G-ALPHA1, G-ALPHA2', '50-86, 140-176']
 
     Args:
-        sequences: one amino-acid sequence or any collection of them - a list, Series,
-            dict of name -> sequence, list of records, or a DataFrame.
-        helix: how the groove helices are found, ``'imgt'`` (default) or
-            ``'tpm-bench'`` (see :data:`HELIX_METHODS`).
+        sequences: one amino-acid sequence or any collection (list, dict, DataFrame...).
+        helix: ``'imgt'`` (default, fixed IMGT positions) or ``'tpm-bench'`` (MHC Motif
+            Atlas ranges, http://mhcmotifatlas.org).
         per_residue: one row per residue instead of one per sequence.
-        collapse: one row per *segment* instead: a run of consecutive residues that
-            share the value of this per-residue column, e.g. ``'topology'``, or of
-            several, e.g. ``['domain', 'region']``. Any of
-            :data:`COLLAPSIBLE`; ``True`` means ``['domain', 'region']``. Implies the
-            per-residue numbering.
-        mark_regions: add ``topology_seq``, a string as long as the sequence with one
-            letter per residue - ``S`` signal peptide, ``O`` extracellular, ``M``
-            transmembrane, ``I`` cytoplasmic, ``-`` unknown. The same alphabet and
-            column :func:`tcrkit.mhc_sequence` uses, estimated here from the allele
-            this sequence matched.
-        col_mapping: where the sequence lives when the input is a frame or records,
-            e.g. ``{'sequence': 'mhc_seq'}``.
+        collapse: one row per run of residues sharing these per-residue column(s), any of
+            :data:`COLLAPSIBLE`; ``True`` means ``['domain', 'region']``.
+        mark_regions: add ``topology_seq``, one letter per residue (``S``/``O``/``M``/
+            ``I``/``-``), as in :func:`tcrkit.mhc_sequence`.
+        col_mapping: where the sequence lives in a frame, e.g. ``{'sequence': 'mhc_seq'}``.
         squeeze: return the plain result instead of a frame.
 
     Returns:
-        Indexed like the input. ``sequence`` echoes it, then
+        Per sequence: ``gene``, ``allele`` (closest bundled one - the gene is reliable,
+        the allele approximate), ``allele_identity`` (1.0 = identical where aligned),
+        ``mhc_class``, ``score``, ``span``, ``domains``, ``domain_spans``, ``helix``
+        (1-based ranges), ``regions`` plus one range column per membrane region, and
+        ``error``.
 
-        - ``gene`` (``'A'``, ``'DRB1'``, ``'B2M'``, ...), ``allele`` (the closest
-          bundled allele, e.g. ``'A0201'``), ``allele_identity`` (the fraction of
-          identical residues between your sequence and that allele over the part that
-          aligns; 1.0 is an exact match there), ``mhc_class`` (``'I'``, ``'II'``, or
-          ``'-'`` for B2M), ``score`` (alignment score per residue) and ``span``
-          (1-based range of the MHC part);
-        - ``domains``: the G domains found, in sequence order; ``domain_spans``: their
-          1-based residue ranges;
-        - ``helix``: the 1-based ranges of the groove-helix residues;
-        - ``regions``: which topology regions this sequence contains, in order, then
-          one column per region - ``signal_peptide``,
-          ``extracellular``, ``transmembrane``, ``cytoplasmic`` - giving that
-          region's 1-based range in *this* sequence, carried over from the matched
-          allele by alignment. A chain that is not exactly a bundled allele, or only
-          a fragment of one, is marked from the closest allele;
-        - ``error``: why nothing was found, e.g. for a TCR chain or a peptide.
+        Per residue: ``position``, ``aa``, ``gene``, ``allele``, ``domain``, ``imgt``,
+        ``region`` (IMGT strand A-D, turn, or ``'helix'`` = IMGT 50-92), ``helix``
+        (bool) and ``topology``. The ``helix`` column is the reference for the groove
+        helices: the residues TCR docking angles are measured on, narrower than
+        ``region == 'helix'``.
 
-        With ``per_residue=True``: one row per residue, indexed by the input's index
-        repeated: ``position`` (1-based), ``aa``, ``gene``, ``allele``, ``domain``,
-        ``imgt`` (the IMGT label, ``'-'`` outside the G domains), ``region`` (IMGT's
-        strand ``'A'`` ... ``'D'`` or ``'helix'``, 50-92B), ``helix`` (True / False,
-        by `helix`) and
-        ``topology`` (``'signal'``, ``'extracellular'``, ``'transmembrane'``,
-        ``'cytoplasmic'``, or ``'-'``).
-        ``attrs['templates']`` holds the IMGT entries each sequence was numbered on.
-
-        With `collapse`: one row per segment, in sequence order, indexed by the input's
-        index repeated: the `collapse` column(s), then ``start`` / ``end`` (1-based,
-        inclusive) and ``length``, ``imgt_start`` / ``imgt_end`` (the first and last
-        IMGT label in the segment, None if it has none), and its ``sequence``.
+        With `collapse`: the column value(s), ``start`` / ``end``, ``length``,
+        ``imgt_start`` / ``imgt_end`` and ``sequence`` per segment.
     """
     if helix not in HELIX_METHODS:
         raise ValueError(f'helix must be one of {HELIX_METHODS}, got {helix!r}')

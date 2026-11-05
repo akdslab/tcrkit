@@ -110,10 +110,10 @@ def test_squeeze_gives_the_bare_value():
 
 def test_stitch_beta():
     out = tcrkit.stitch('TRBV19', 'TRBJ2-7', 'CASSIRSSYEQYF',
-                        chain='beta', species='HUMAN')
+                        chain='beta', species='HUMAN', include_nt=True)
     r = out.iloc[0]
     assert r['error'] == '-'
-    assert len(r['sequence']) == 924
+    assert len(r['sequence_nt']) == 924
     assert r['sequence_aa'].startswith('MSNQVLCCVVLCFLGANTVD')
     # the CDR3 that went in must be readable in the translation that came out
     assert 'CASSIRSSYEQYF' in r['sequence_aa']
@@ -121,9 +121,9 @@ def test_stitch_beta():
 
 def test_stitch_alpha():
     r = tcrkit.stitch('TRAV12-2', 'TRAJ23', 'CAVNTGGGNKLTF',
-                      chain='alpha', species='HUMAN').iloc[0]
+                      chain='alpha', species='HUMAN', include_nt=True).iloc[0]
     assert r['error'] == '-'
-    assert len(r['sequence']) == 819
+    assert len(r['sequence_nt']) == 819
     assert r['sequence_aa'].startswith('MKSLRVLLVILWLQLSWVWS')
 
 
@@ -132,9 +132,9 @@ def test_stitch_does_not_repair_the_cdr3_itself():
     out = tcrkit.stitch('TRBV19', 'TRBJ2-7', 'ASSIRSSYEQY', chain='beta')
     r = out.iloc[0]
     assert r['error'] != '-'
-    assert r['sequence'] == '-'
+    assert r['sequence_aa'] == '-'
     # stitch stitches exactly what it was given - no repair columns, no retry bookkeeping
-    assert list(out.columns) == ['v', 'j', 'cdr3', 'sequence', 'sequence_aa',
+    assert list(out.columns) == ['v', 'j', 'cdr3', 'sequence_aa',
                                  'error', 'stitchr_warnings']
     for gone in ('cdr3_fix', 'cdr3_changed', 'junction_fix', 'species_fix',
                  'n_attempts', 'attempt_log'):
@@ -164,8 +164,8 @@ def test_fix_junction_then_stitch_is_the_two_step_flow():
     out = tcrkit.stitch(df, progress_bar=False)
     assert (out['error'] == '-').all()
     # identical to stitching those completed CDR3s directly
-    assert out['sequence'][0] == tcrkit.stitch('TRBV19', 'TRBJ2-7', 'CASSIRSSYEQYF',
-                                               chain='beta')['sequence'][0]
+    assert out['sequence_aa'][0] == tcrkit.stitch('TRBV19', 'TRBJ2-7', 'CASSIRSSYEQYF',
+                                                  chain='beta')['sequence_aa'][0]
 
 
 def test_stitch_run_anarci_reads_the_stitched_sequence_back():
@@ -216,8 +216,9 @@ def test_constant_auto_does_not_undo_no_leader():
 
 
 def test_stitch_missing_input_is_reported_not_raised():
-    r = tcrkit.stitch(None, 'TRBJ2-7', 'CASSIRSSYEQYF', chain='beta').iloc[0]
-    assert r['sequence'] == '-'
+    r = tcrkit.stitch(None, 'TRBJ2-7', 'CASSIRSSYEQYF', chain='beta',
+                      include_nt=True).iloc[0]
+    assert r['sequence_nt'] == '-'
     assert r['error'] == 'missing v/j/cdr3 input'
 
 
@@ -234,9 +235,9 @@ def test_stitch_takes_chain_and_species_per_row():
         {'v': 'TRBV19', 'j': 'TRBJ2-7', 'cdr3': 'CASSIRSSYEQYF', 'chain': 'beta'},
         {'v': 'TRAV12-2', 'j': 'TRAJ23', 'cdr3': 'CAVNTGGGNKLTF', 'chain': 'alpha'},
     ])
-    out = tcrkit.stitch(df, progress_bar=False)
+    out = tcrkit.stitch(df, progress_bar=False, include_nt=True)
     assert (out['error'] == '-').all()
-    assert list(out['sequence'].str.len()) == [924, 819]
+    assert list(out['sequence_nt'].str.len()) == [924, 819]
 
 
 def test_stitch_reports_a_bad_row_without_aborting_the_batch():
@@ -404,7 +405,7 @@ def test_stitch_chain_may_be_a_sequence():
                         ['CASSIRSSYEQYF', 'CAVNTGGGNKLTF'],
                         chain=['beta', 'alpha'], progress_bar=False)
     assert (out['error'] == '-').all()
-    assert list(out['sequence'].str.len()) == [924, 819]
+    assert list(out['sequence_aa'].str.len()) == [308, 273]
 
 
 def test_normalize_tcr_per_row_species_from_a_column():
@@ -725,13 +726,15 @@ def test_stitch_pair_stitches_both_chains_in_one_call():
     """The one function that is not per-chain: a whole receptor from one row."""
     df = pd.DataFrame([{'a_v': 'TRAV12-2', 'a_j': 'TRAJ23', 'a_cdr3': 'CAVNTGGGNKLTF',
                         'b_v': 'TRBV19', 'b_j': 'TRBJ2-7', 'b_cdr3': 'CASSIRSSYEQYF'}])
-    out = tcrkit.stitch_pair(
-        df, col_mapping={'alpha_v': 'a_v', 'alpha_j': 'a_j', 'alpha_cdr3': 'a_cdr3',
-                         'beta_v': 'b_v', 'beta_j': 'b_j', 'beta_cdr3': 'b_cdr3'},
-        species='human')
+    mapping = {'alpha_v': 'a_v', 'alpha_j': 'a_j', 'alpha_cdr3': 'a_cdr3',
+               'beta_v': 'b_v', 'beta_j': 'b_j', 'beta_cdr3': 'b_cdr3'}
+    out = tcrkit.stitch_pair(df, col_mapping=mapping, species='human')
     assert out['error'][0] == '-'
     for chain in ('alpha', 'beta'):
         assert len(out[f'{chain}_sequence_aa'][0]) > 100
+        assert f'{chain}_sequence_nt' not in out
+    nt = tcrkit.stitch_pair(df, col_mapping=mapping, include_nt=True).iloc[0]
+    assert len(nt['alpha_sequence_nt']) == 3 * len(nt['alpha_sequence_aa'])
 
 
 def test_read_sequences_reads_plain_and_fasta(tmp_path):
@@ -848,6 +851,15 @@ def test_build_tcr_pmhc_reports_per_row_instead_of_raising():
 
 
 @needs_mhc_ref
+def test_build_tcr_pmhc_nucleotides_only_on_request():
+    out = tcrkit.build_tcr_pmhc(PMHC_RAW.iloc[[0]], run_anarci=False, progress_bar=False)
+    assert 'beta_sequence_nt' not in out and 'beta_sequence' not in out
+    nt = tcrkit.build_tcr_pmhc(PMHC_RAW.iloc[[0]], run_anarci=False, progress_bar=False,
+                               include_nt=True).iloc[0]
+    assert len(nt['beta_sequence_nt']) == 3 * len(nt['beta_sequence_aa'])
+
+
+@needs_mhc_ref
 def test_build_tcr_pmhc_single_chain_and_col_mapping():
     df = pd.DataFrame([{'v_call': 'TRBV19', 'j_call': 'TRBJ2-7',
                         'junction_aa': 'ASSIRSSYEQY', 'mhc.a': 'DRA*01:01',
@@ -936,3 +948,33 @@ def test_anarci_collapse_region_agrees_with_the_cdr_columns():
 def test_anarci_collapse_rejects_unknown_columns():
     with pytest.raises(ValueError, match='collapse takes'):
         tcrkit.anarci(ALPHA_AA, collapse='topology')
+
+
+# ---------------------------------------------------------------------------
+# squeeze on to_gene, stitch_pair, build_tcr_pmhc
+# ---------------------------------------------------------------------------
+
+def test_to_gene_squeeze():
+    assert tcrkit.to_gene('TRBV20-1*01', squeeze=True) == 'TRBV20-1'
+    many = tcrkit.to_gene(['TRBV20-1*01', 'TRAV1-2*01'], squeeze=True)
+    assert isinstance(many, pd.Series) and list(many) == ['TRBV20-1', 'TRAV1-2']
+
+
+def test_stitch_pair_squeeze_gives_the_row():
+    df = pd.DataFrame([{'a_v': 'TRAV12-2', 'a_j': 'TRAJ23', 'a_cdr3': 'CAVNTGGGNKLTF',
+                        'b_v': 'TRBV19', 'b_j': 'TRBJ2-7', 'b_cdr3': 'CASSIRSSYEQYF'}])
+    cols = {'alpha_v': 'a_v', 'alpha_j': 'a_j', 'alpha_cdr3': 'a_cdr3',
+            'beta_v': 'b_v', 'beta_j': 'b_j', 'beta_cdr3': 'b_cdr3'}
+    row = tcrkit.stitch_pair(df, col_mapping=cols, squeeze=True)
+    assert isinstance(row, pd.Series) and row.error == '-'
+    assert row.equals(tcrkit.stitch_pair(df, col_mapping=cols).iloc[0])
+
+
+@needs_mhc_ref
+def test_build_tcr_pmhc_squeeze_gives_the_row():
+    row = tcrkit.build_tcr_pmhc(PMHC_RAW.iloc[[0]], progress_bar=False, squeeze=True)
+    assert isinstance(row, pd.Series)
+    assert row.epitope == 'GILGFVFTL' and row.beta_v == 'TRBV20-1' and row.ok
+    # several rows: unchanged
+    assert isinstance(tcrkit.build_tcr_pmhc(PMHC_RAW, progress_bar=False, squeeze=True),
+                      pd.DataFrame)

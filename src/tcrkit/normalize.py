@@ -115,9 +115,8 @@ def normalize_tcr(symbols, species=None, col_mapping=None, with_gene=False,
                   squeeze: bool = False, **kwargs) -> pd.DataFrame:
     """Standardize TCR gene/allele symbols to IMGT nomenclature.
 
-    >>> normalize_tcr('TCRBV20S1', species='human')[['symbol', 'standardized']]
-       symbol standardized
-    0  TCRBV20S1     TRBV20-1
+    >>> normalize_tcr('TCRBV20S1', species='human')[['symbol', 'standardized']].values.tolist()
+    [['TCRBV20S1', 'TRBV20-1']]
 
     >>> list(normalize_tcr(['TCRBV20S1', 'TRAV23/6'], species='human')['standardized'])
     ['TRBV20-1', 'TRAV23/DV6']
@@ -186,15 +185,19 @@ def normalize_tcr(symbols, species=None, col_mapping=None, with_gene=False,
     return res
 
 
-def to_gene(symbols, species=None, **kwargs) -> pd.DataFrame:
+def to_gene(symbols, species=None, squeeze: bool = False, **kwargs) -> pd.DataFrame:
     """:func:`normalize_tcr` truncated to the gene; keeps the input on failure.
 
     >>> to_gene('TRBV20-1*01', species='human')['standardized'][0]
     'TRBV20-1'
+    >>> to_gene('TRBV20-1*01', squeeze=True)
+    'TRBV20-1'
+
+    `squeeze` as :func:`normalize_tcr`: the bare gene for one symbol, a Series for many.
     """
     kwargs.setdefault('precision', 'gene')
     kwargs.setdefault('on_fail', 'keep')
-    return normalize_tcr(symbols, species=species, **kwargs)
+    return normalize_tcr(symbols, species=species, squeeze=squeeze, **kwargs)
 
 
 @lru_cache(maxsize=None)
@@ -515,7 +518,7 @@ def _parse_allele(allele, paired: bool = False, chain: str | None = None,
                   fix_chain_order: bool = True) -> dict:
     """One allele -> a dict of structured fields. The single-value core.
 
-    >>> res = normalize_mhc('A*0201')
+    >>> res = normalize_mhc('A*0201', squeeze=True)
     >>> res['allele'], res['gene'], res['mhc_class'], res['species']
     ('A0201', 'A', 'I', 'human')
 

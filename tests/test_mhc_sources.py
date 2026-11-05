@@ -42,7 +42,7 @@ def test_bundled_path_gives_the_bundled_table():
 
 def test_unknown_source_is_refused():
     with pytest.raises(ValueError, match='source must be one of'):
-        tcrkit.load_mhc_table(source='ipd')
+        tcrkit.load_mhc_table(source='nope')
     with pytest.raises(ValueError, match='not both'):
         tcrkit.mhc_sequence('A*02:01', table=tcrkit.load_mhc_table(), source='uniprot')
 
@@ -198,3 +198,33 @@ def test_print_residues(capsys):
     assert 'topology: O extracellular, M transmembrane' in out or 'M transmembrane' in out
     with pytest.raises(ValueError, match='per-residue table'):
         tcrkit.print_residues(tcrkit.annotate_mhc(seq))
+
+
+def test_print_residues_color(capsys):
+    seq = tcrkit.mhc_sequence('A*02:01', squeeze=True)['sequence']
+    res = tcrkit.annotate_mhc({'A2': seq}, per_residue=True)
+    tcrkit.print_residues(res)
+    plain = capsys.readouterr().out
+    assert '\033[' not in plain                                   # off by default
+    tcrkit.print_residues(res, color=True)
+    colored = capsys.readouterr().out
+    assert '\033[34m' in colored and '\033[31m' in colored        # strands, helix
+    import re
+    assert re.sub(r'\033\[\d+m', '', colored) == plain            # same text otherwise
+    with pytest.raises(ValueError, match='no .topology. line'):
+        tcrkit.print_residues(res, columns=['region'], color='topology')
+
+
+def test_imgt_regions_lists_the_ranges_behind_the_labels():
+    t = tcrkit.imgt_regions()                       # by default: CDRs and helices only
+    assert t['region'].tolist() == ['CDR1', 'CDR2', 'CDR3'] + ['helix'] * 4
+    assert set(t.loc[t['scheme'] == 'mhc', 'column']) == {'helix'}
+    full = tcrkit.imgt_regions(all_regions=True)
+    assert set(full['scheme']) == {'tcr', 'mhc'} and full['source'].str.len().gt(0).all()
+    tcr = tcrkit.imgt_regions('tcr').set_index('region')
+    assert tuple(tcr.loc['CDR3', ['imgt_start', 'imgt_end']]) == (105, 117)
+    b = tcrkit.imgt_regions('mhc', all_regions=True).query("domain == 'G-BETA' and region == 'helix'")
+    assert b[['column', 'imgt_start', 'imgt_end', 'skipped']].values.tolist() == \
+        [['region', 50, 92, ''], ['helix', 52, 86, '61B, 62']]
+    with pytest.raises(ValueError, match='scheme'):
+        tcrkit.imgt_regions('bcr')

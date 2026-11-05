@@ -42,6 +42,7 @@ Builds a full-length TCR chain from gene calls and a CDR3, via Stitchr.
 | `species` | `'human'` (default) or `'mouse'`. Needs `stitchrdl -s <species>` run once |
 | `constant` | `None` → `DEFAULT_CONSTANT` (this package's fixed per-chain convention); `'auto'` → Stitchr's J-gene-aware rule; an allele name such as `'TRBC2*01'`; or `{'beta': 'TRBC2*01'}` per chain. `'constant'` / `'default'` are synonyms for `None` |
 | `no_leader` | drop the leader sequence from the output |
+| `include_nt` | also return the stitched nucleotides, as `sequence_nt` |
 | `run_anarci` | also annotate each stitched sequence with ANARCI, adding `anarci_cols` |
 | `engine` | `'stitchr'` (a Python call per row) or `'thimble'` (one CLI run for the whole input) |
 | `max_workers` | fan rows out over this many processes |
@@ -49,8 +50,9 @@ Builds a full-length TCR chain from gene calls and a CDR3, via Stitchr.
 | `anarci_cols` · `anarci_kwargs` | which ANARCI columns `run_anarci` keeps (`None` keeps all), and extra arguments for that pass, e.g. `{'allow': {'A', 'B'}}` |
 | `**engine_kwargs` | passed to the engine, e.g. `thimble_bin=`, `extra_genes=`, `seamless=` for `engine='thimble'` |
 
-Out: `v` / `j` / `cdr3` echoed, `sequence` (nucleotide), `sequence_aa`, `error`, and
-`stitchr_warnings` (Stitchr's own remarks, e.g. which allele it defaulted to).
+Out: `v` / `j` / `cdr3` echoed, `sequence_aa`, `error`, and
+`stitchr_warnings` (Stitchr's own remarks, e.g. which allele it defaulted to). With `include_nt=True`,
+also `sequence_nt`.
 
 A CDR3 without its conserved C104/F118 will **not** stitch — it says `Unable to locate C
 terminus of CDR3`. Repair it first with `add_cdr3_junctions`; `stitch` never repairs.
@@ -71,6 +73,10 @@ blank. `chains` is `('alpha','beta')` or `('gamma','delta')`; the two cannot be 
 | `thimble_bin` | path to the `thimble` executable, if it is not on PATH |
 | `in_file`, `out_file`, `work_dir`, `keep_files` | the TSVs thimble reads and writes live in a temp dir that is deleted afterwards — unless you name one (`in_file` / `out_file`, then kept), choose the dir (`work_dir`), or keep it all (`keep_files=True`, prints the paths) |
 | `verbose` | print the command and thimble's output |
+| `squeeze` | a one-row `df` comes back as that row, a Series |
+| `include_nt` | also return `{chain}_sequence_nt` |
+
+Out: `{chain}_sequence_aa` per chain, `error`, `thimble_log`.
 
 ### `DEFAULT_CONSTANT`
 
@@ -141,10 +147,11 @@ Out: `symbol`, `standardized`, `species`, `error`. Unresolvable symbols come bac
 > species='mouse')` returns `'TRBV20'` — a different gene, no error. Leave `species` unset,
 > or compare `standardized` against `symbol`.
 
-### `to_gene(symbols, species=None)`
+### `to_gene(symbols, species=None, squeeze=False)`
 
 `normalize_tcr` truncated to the gene: `TRBV20-1*01` → `TRBV20-1`. Keeps the input on
-failure. Extra keywords go to `normalize_tcr`.
+failure. `squeeze=True` gives the bare gene (a Series for many). Extra keywords go to
+`normalize_tcr`.
 
 ### `genes_match(gene, symbol) -> bool`
 
@@ -348,6 +355,15 @@ With `per_residue=True`, one row per residue instead: `position`, `aa`, `gene`, 
 `topology` (`'signal_peptide'`, `'extracellular'`, `'transmembrane'`, `'cytoplasmic'`
 or `'-'`).
 
+> **`region == 'helix'` and `helix` differ on purpose.** `region` is IMGT's structural
+> label ([G-DOMAIN](https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/G-DOMAIN/Gdomains.html)): everything after strand D, IMGT 50–92. `helix` marks only the groove-helix
+> residues TCR docking angles are measured on (with the default `helix='imgt'`:
+> 50–86 on G-ALPHA1 / G-ALPHA, 52–86 on G-ALPHA2 / G-BETA), so it drops the helix ends
+> and always sits inside the region. **Treat the `helix` column as the reference for the
+> groove helices**; `region` is only IMGT's coarse label, useful for cutting the domain.
+> Wherever tcrkit reports a helix (`collapse='helix'`, the `print_residues` `helix` line),
+> it means the `helix` column.
+
 `mark_regions=True` adds `topology_seq`, one letter per residue in the same alphabet as
 `mhc_sequence` (`S` / `O` / `M` / `I` / `-`), estimated from the matched allele.
 
@@ -423,13 +439,39 @@ tcrkit.print_residues(tcrkit.annotate_mhc(seq, per_residue=True))
 ```
 
 `columns=` picks the lines (default: whichever of `topology`, `domain`, `region`, `helix`
-the table has); `SYMBOLS` says which character stands for what.
+the table has); `SYMBOLS` says which character stands for what. `color=True` colours the
+residues and the `region` line by region (strands blue, turns grey, helix red, CDRs
+yellow / green / magenta); `color='topology'` colours by another line. Terminals and
+Jupyter show the colours.
+
+The `region` line's `H` (IMGT 50–92) is wider than the `helix` line, which is
+the reference for the helices; the note under `annotate_mhc` says why.
+
+### `imgt_regions(scheme=None, all_regions=False)`
+
+The IMGT ranges behind the `region` and `helix` columns, with their sources. By default
+only the important ones, CDR1–3 and the groove helices; `all_regions=True` adds the
+frameworks, strands, turns and IMGT's helix region (50–92). One row per range, with `scheme` (`'tcr'` / `'mhc'`), `mhc_class`, `chain`, `domain`, `region`, `column` (`region` or
+`helix`), `imgt_start` / `imgt_end` (inclusive), `skipped` and `source`.
+
+The helix positions are fixed per G domain, so there are two per class: class I has
+G-ALPHA1 and G-ALPHA2 on its heavy chain, class II has G-ALPHA on the alpha chain and
+G-BETA on the beta chain. The CDR positions are the same on every TCR chain.
+
+```python
+tcrkit.imgt_regions()                          # CDR1-3 and the helix of each G domain
+tcrkit.imgt_regions('mhc', all_regions=True)   # + strands, turns, IMGT's helix region
+```
+
+TCR ranges are from IMGT's [FR/CDR definition](https://www.imgt.org/IMGTScientificChart/Nomenclature/IMGT-FRCDRdefinition.html),
+MHC ranges from IMGT's [G-DOMAIN page](https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/G-DOMAIN/Gdomains.html).
+The `helix` column rows are tcrkit's `helix='imgt'` residues.
 
 ---
 
 ## 6. The whole complex
 
-### `build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True, mhc_table=None, keep=None)`
+### `build_tcr_pmhc(df, col_mapping=None, species='human', run_anarci=True, mhc_table=None, keep=None, squeeze=False, include_nt=False)`
 
 Runs every capability in the order they have to happen, then checks itself:
 
@@ -453,7 +495,9 @@ Every complaint lands in one `error` column with an `ok` flag.
 `mhc_table=` supplies your own MHC sequences instead of the bundled table (same contract
 as `mhc_sequence`'s `table=`). If no table can be found, the MHC sequence columns come
 back empty with a warning and the rest of the build still happens. `run_anarci=False` skips step 5,
-the slow one. `keep=` limits which input columns are carried through.
+the slow one. `keep=` limits which input columns are carried through. `squeeze=True` returns a
+one-row input as that row, a Series, with every column kept. `include_nt=True` adds
+each chain's nucleotides as `{chain}_sequence_nt`.
 
 ---
 

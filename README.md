@@ -14,6 +14,7 @@ command line.
 | `normalize_mhc`          | HLA/MHC allele names → standard form                  | [mhcgnomes](https://github.com/pirl-unc/mhcgnomes) |
 | `mhc_sequence`           | MHC allele → protein sequence                         | bundled table                                      |
 | `annotate_mhc`           | MHC chain → gene, IMGT numbering, groove helices      | bundled table + IMGT G-DOMAIN                      |
+| `imgt_regions`           | the IMGT ranges behind those labels, with sources     | IMGT                                               |
 | `build_tcr_pmhc`         | a table of TCR pairs + MHC → the whole complex        | all of the above                                   |
 | `diversity`, `morisita_horn`, `generation_probability`, `tcrdist` | repertoire metrics | scikit-bio, OLGA, tcrdist3 |
 

@@ -91,7 +91,7 @@ def _cmd_stitch(args):
         out = stitch(df, col_mapping=mapping, chain=args.chain, species=args.species,
                      no_leader=args.no_leader, constant=args.constant,
                      engine=args.engine, progress_bar=not args.quiet,
-                     run_anarci=args.run_anarci)
+                     run_anarci=args.run_anarci, include_nt=args.include_nt)
         if args.join:
             out = df.join(out.drop(columns=['v', 'j', 'cdr3'], errors='ignore'),
                           rsuffix='_stitched')
@@ -100,7 +100,8 @@ def _cmd_stitch(args):
     _require(args, 'v')
     out = stitch(args.v, args.j, args.cdr3, chain=args.chain, species=args.species,
                  no_leader=args.no_leader, constant=args.constant,
-                 engine=args.engine, run_anarci=args.run_anarci, progress_bar=False)
+                 engine=args.engine, run_anarci=args.run_anarci, progress_bar=False,
+                 include_nt=args.include_nt)
     if args.json:
         print(json.dumps(out.iloc[0].to_dict(), indent=2, default=str))
     else:
@@ -140,6 +141,8 @@ def _add_stitch(sub):
                    help="omit the V gene's leader sequence")
     p.add_argument('--run-anarci', action='store_true',
                    help='re-read the stitched sequence with ANARCI')
+    p.add_argument('--include-nt', action='store_true',
+                   help='also output the stitched nucleotides (sequence_nt)')
     p.add_argument('--engine', default='stitchr', choices=['stitchr', 'thimble'],
                    help="'thimble' runs Stitchr's CLI once for the whole input "
                         '(default: stitchr)')

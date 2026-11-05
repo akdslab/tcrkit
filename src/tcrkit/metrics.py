@@ -134,7 +134,7 @@ def diversity(data, count=None, by=None, col_mapping=None,
 
     >>> out = diversity(['A', 'A', 'A', 'B', 'C'])
     >>> out[['n_clones', 'n_cells']].to_dict('records')
-    [{'n_clones': 3, 'n_cells': 5}]
+    [{'n_clones': 3, 'n_cells': 5.0}]
     >>> round(float(out['clonality'][0]), 3)
     0.135
 
@@ -215,9 +215,9 @@ def morisita_horn(data, other=None, count=None, by=None, col_mapping=None,
                   long: bool = False, squeeze: bool = False) -> pd.DataFrame:
     """Morisita-Horn overlap: 0 when two repertoires share no clones, 1 when identical.
 
-    >>> morisita_horn({'A': 10, 'B': 5}, {'A': 10, 'B': 5}, squeeze=True)
+    >>> float(morisita_horn({'A': 10, 'B': 5}, {'A': 10, 'B': 5}, squeeze=True))
     1.0
-    >>> morisita_horn({'A': 10, 'B': 5}, {'C': 10, 'D': 5}, squeeze=True)
+    >>> float(morisita_horn({'A': 10, 'B': 5}, {'C': 10, 'D': 5}, squeeze=True))
     0.0
 
     Args:

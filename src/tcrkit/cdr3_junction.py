@@ -357,7 +357,7 @@ def build_junction_table(ref, cdr3_col, j_col, v_col=None, species_col=None, pat
     >>> ref = pd.DataFrame({'cdr3': ['CASSYSGNTEAFF'] * 5, 'j': ['TRBJ1-1'] * 5,
     ...                     'sp': ['human'] * 5})
     >>> tab = build_junction_table(ref, 'cdr3', 'j', species_col='sp')
-    >>> add_cdr3_junctions('ASSYSGNTEAF', 'TRBJ1-1', table=tab)
+    >>> add_cdr3_junctions('ASSYSGNTEAF', 'TRBJ1-1', table=tab, squeeze=True)
     'CASSYSGNTEAFF'
 
     Args:
