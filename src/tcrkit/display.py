@@ -18,15 +18,18 @@ import sys
 
 import pandas as pd
 
-__all__ = ['print_residues', 'SYMBOLS', 'COLORS']
+__all__ = ['print_residues', 'mark_string', 'SYMBOLS', 'COLORS']
 
 #: One character per value, for each column that can be printed. Anything not listed
 #: prints as its first character; empty and ``'-'`` print as a blank.
 SYMBOLS = {
     'topology': {'signal_peptide': 'S', 'extracellular': 'O', 'transmembrane': 'M',
                  'cytoplasmic': 'I'},
-    'domain': {'G-ALPHA1': '1', 'G-ALPHA2': '2', 'G-ALPHA': 'a', 'G-BETA': 'b'},
+    'domain': {'G-ALPHA1': '1', 'G-ALPHA2': '2', 'G-ALPHA': 'a', 'G-BETA': 'b',
+               'C-LIKE': 'c', 'V': 'V', 'C': 'C'},
+    'gene_segment': {'L': 'L', 'V': 'V', 'J': 'J', 'N/D': 'n', 'C': 'C'},
     'region': {'A': 'A', 'AB': '.', 'B': 'B', 'BC': '.', 'C': 'C', 'CD': '.', 'D': 'D',
+               'DE': ':', 'E': 'E', 'EF': ':', 'F': 'F', 'FG': ':', 'G': 'G',
                'helix': 'H',
                'FR1': 'f', 'FR2': 'f', 'FR3': 'f', 'FR4': 'f',
                'CDR1': '1', 'CDR2': '2', 'CDR3': '3'},
@@ -36,22 +39,29 @@ SYMBOLS = {
 _MEANING = {
     'topology': {'S': 'signal peptide', 'O': 'extracellular', 'M': 'transmembrane',
                  'I': 'cytoplasmic'},
-    'domain': {'1': 'G-ALPHA1', '2': 'G-ALPHA2', 'a': 'G-ALPHA', 'b': 'G-BETA'},
+    'domain': {'1': 'G-ALPHA1', '2': 'G-ALPHA2', 'a': 'G-ALPHA', 'b': 'G-BETA',
+               'c': 'C-LIKE', 'V': 'V domain', 'C': 'constant domain'},
+    'gene_segment': {'L': 'leader (V gene)', 'V': 'V gene', 'J': 'J gene',
+                     'n': 'N/D (neither V nor J)',
+                     'C': 'C gene'},
     'region': {'A': 'strand A', 'B': 'strand B', 'C': 'strand C', 'D': 'strand D',
-               '.': 'turn (AB, BC, CD)', 'H': 'helix region (IMGT 50-92)',
+               'E': 'strand E', 'F': 'strand F', 'G': 'strand G',
+               '.': 'turn (AB, BC, CD)', ':': 'turn (DE, EF, FG)', 'H': 'helix region (IMGT 50-92)',
                'f': 'framework', '1': 'CDR1', '2': 'CDR2', '3': 'CDR3'},
     'helix': {'H': 'groove-helix residue'},
 }
 
-_DEFAULT = ('topology', 'domain', 'region', 'helix')
+_DEFAULT = ('topology', 'domain', 'gene_segment', 'region', 'helix')
 
 #: Terminal colours (ANSI codes) per printed character, for ``color=``. Characters not
 #: listed print uncoloured.
 COLORS = {
-    'region': {'A': '34', 'B': '34', 'C': '34', 'D': '34', '.': '90', 'H': '31',
+    'region': {'A': '34', 'B': '34', 'C': '34', 'D': '34', 'E': '34', 'F': '34', 'G': '34',
+               '.': '90', ':': '90', 'H': '31',
                '1': '33', '2': '32', '3': '35'},
     'topology': {'S': '33', 'M': '35', 'I': '36'},
-    'domain': {'1': '34', '2': '32', 'a': '34', 'b': '32'},
+    'domain': {'1': '34', '2': '32', 'a': '34', 'b': '32', 'V': '34', 'C': '32', 'c': '32'},
+    'gene_segment': {'L': '90', 'V': '34', 'J': '33', 'n': '35', 'C': '32'},
     'helix': {'H': '31'},
 }
 
@@ -80,6 +90,22 @@ def _symbol(column: str, value) -> str:
     return ' ' if text in ('', '-') else text[0]
 
 
+def show(residues: pd.DataFrame, option) -> None:
+    """What ``show=`` does in :func:`tcrkit.anarci` / :func:`tcrkit.annotate_mhc`: print
+    `residues` in colour if `option` is ``True``, or with `option` as print_residues
+    options if it is a dict (colour on unless it says ``'color': False``); nothing if it
+    is false. Returns None."""
+    if option:
+        print_residues(residues, **{'color': True,
+                                    **(option if isinstance(option, dict) else {})})
+
+
+def mark_string(values, column: str) -> str:
+    """One character per value, as :func:`print_residues` prints `column`, with ``'-'``
+    where it prints a blank: ``mark_string(['FR1', 'CDR1'], 'region') == 'f1'``."""
+    return ''.join(_symbol(column, v) for v in values).replace(' ', '-')
+
+
 def _ruler(start: int, length: int) -> str:
     """Position numbers every 10 residues: ``'1         11        21'``."""
     line = [' '] * (length + 8)
@@ -89,7 +115,7 @@ def _ruler(start: int, length: int) -> str:
     return ''.join(line).rstrip()
 
 
-def print_residues(residues: pd.DataFrame, columns=None, width: int = 60,
+def print_residues(residues: pd.DataFrame, columns=None, width: int | None = 60,
                    file=None, color=False) -> None:
     """Print each sequence of a per-residue table with its annotation underneath.
 
@@ -98,9 +124,11 @@ def print_residues(residues: pd.DataFrame, columns=None, width: int = 60,
             :func:`tcrkit.anarci` (``per_residue=True``): one row per residue, with
             ``position`` and ``aa``, indexed by sequence.
         columns: which annotation lines to print, top to bottom; default: whichever of
-            ``topology``, ``domain``, ``region`` and ``helix`` the table has. Any column
-            works; see :data:`SYMBOLS` for how values become characters.
-        width: residues per line.
+            ``topology``, ``domain``, ``gene_segment``, ``region`` and ``helix`` the
+            table has (``domain`` is left out when ``gene_segment`` is there: on a TCR
+            it says the same). Any column works; see :data:`SYMBOLS` for how values
+            become characters.
+        width: residues per line; ``None`` puts each whole sequence on one line.
         file: where to print (default: stdout).
         color: colour the residues and one annotation line by that line's values, with
             terminal colour codes (shown by terminals and Jupyter). ``True`` colours by
@@ -110,7 +138,11 @@ def print_residues(residues: pd.DataFrame, columns=None, width: int = 60,
     if not {'position', 'aa'} <= set(residues.columns):
         raise ValueError('print_residues needs a per-residue table: '
                          'annotate_mhc(..., per_residue=True) or anarci(..., per_residue=True)')
-    columns = [c for c in (columns or _DEFAULT) if c in residues.columns]
+    if columns is None:
+        columns = [c for c in _DEFAULT if c in residues.columns]
+        if 'gene_segment' in columns and 'domain' in columns:
+            columns.remove('domain')
+    columns = [c for c in columns if c in residues.columns]
     by = ('region' if color is True else color) or None
     if by is not None and by not in columns:
         raise ValueError(f'color={color!r}: no {by!r} line to colour by; lines: {columns}')
@@ -124,14 +156,15 @@ def print_residues(residues: pd.DataFrame, columns=None, width: int = 60,
         for c, t in tracks.items():
             used[c] |= set(t) - {' '}
         print(f'{name}  {len(seq)} residues', file=out)
-        for i in range(0, len(seq), width):
-            print(' ' * pad + _ruler(int(res['position'].iloc[i]), len(seq[i:i + width])),
+        step = width or max(len(seq), 1)
+        for i in range(0, len(seq), step):
+            print(' ' * pad + _ruler(int(res['position'].iloc[i]), len(seq[i:i + step])),
                   file=out)
-            chunk = seq[i:i + width]
-            key = tracks[by][i:i + width] if by else ''
+            chunk = seq[i:i + step]
+            key = tracks[by][i:i + step] if by else ''
             print(f"{'sequence':<{pad}}{_paint(chunk, key, palette) if by else chunk}", file=out)
             for c, t in tracks.items():
-                line = t[i:i + width].rstrip()
+                line = t[i:i + step].rstrip()
                 if c == by:
                     line = _paint(line, key, palette)
                 print(f'{c:<{pad}}{line}'.rstrip(), file=out)

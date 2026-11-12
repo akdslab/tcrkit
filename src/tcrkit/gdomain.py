@@ -144,8 +144,11 @@ def is_helix(domain: str, label: str) -> bool:
 # Numbering one sequence
 # ==========================================================================================
 
-def _number_one(sequence: str, template) -> dict[int, tuple[str, str]]:
+def _number_one(sequence: str, template, slots=None) -> dict[int, tuple[str, str]]:
     """``{0-based position: (IMGT label, template residue)}`` for one G domain.
+
+    `slots` are the IMGT positions in order (default: the G domain's, :func:`_slots`);
+    :mod:`tcrkit.cdomain` passes the C-domain ones.
 
     Aligned residues take the template's label. Residues the template has no partner
     for take, in order, the free IMGT positions between their aligned neighbours
@@ -156,7 +159,7 @@ def _number_one(sequence: str, template) -> dict[int, tuple[str, str]]:
     """
     aln = _aligner().align(sequence, template.sequence)[0]
     out: dict[int, tuple[str, str]] = {}
-    slots = _slots(template.domain)
+    slots = _slots(template.domain) if slots is None else slots
     blocks = list(zip(*aln.aligned))
     for k, ((qs, qe), (ts, te)) in enumerate(blocks):
         for i in range(qe - qs):

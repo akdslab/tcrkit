@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.6 - 2026-11-12
+
+- **Class II leaders numbered**: everything before the first IMGT position counts back
+  from it (DRA `-27..-3`, DRB1 `-33..-1`), as class I already did. Domains, regions and
+  helices are unchanged.
+- New `domains=True` on `annotate_mhc` (CLI `--domains`): α3 / α2 / β2 and B2M numbered
+  on IMGT C-LIKE + 1000 (`domain='C-LIKE'`); new `tcrkit.cdomain`, `data/imgt_cdomains.csv`.
+- New `domains=True` on `anarci` (CLI `--domains`): `domain` (V/C) and `gene_segment`
+  (L/V/J/N-D/C, L = the V gene's leader) per residue, the TCR constant domain on IMGT C-DOMAIN + 1000, and
+  `domains` / `domain_spans` per sequence.
+- New `mark_regions=True` on `anarci` (CLI `--mark-regions`): `region_seq` (and
+  `segment_seq`), one character per residue. `print_residues` shows `gene_segment`.
+- New `show=True` on `anarci` / `annotate_mhc`: prints the `print_residues` view
+  (returns None).
+  `print_residues(width=None)`: one line per sequence.
+
 ## 0.1.5 - 2026-11-04
 
 - **Stitched nucleotides are opt-in and renamed**: `sequence` → `sequence_nt`

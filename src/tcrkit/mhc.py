@@ -275,32 +275,79 @@ def _blank(seq: str) -> pd.DataFrame:
 
 # ------------------------------------------------------------- one sequence
 
-def _number_the_leader(num: pd.DataFrame, labels) -> pd.DataFrame:
-    """Number signal-peptide residues backwards from IMGT 1: ``-1`` is the last one.
+#: The membrane regions a residue before the first numbered one may be in for
+#: :func:`_number_the_leader` to number it.
+_LEADER_TOPOLOGY = ('signal_peptide', 'extracellular')
 
-    The usual convention for leader peptides, and for these chains the frames
-    line up - the G domain starts at the mature N-terminus, so the residue before IMGT
-    1 is -1. Only applied when that actually holds: the first numbered residue must be
-    IMGT ``1`` and everything before it the signal peptide. Nothing else unnumbered
-    (the C-like domain, the membrane anchor, the tail) is touched - those belong to
-    other IMGT schemes, and a label here would mean two frames in one column.
+
+def _number_the_leader(num: pd.DataFrame, labels) -> pd.DataFrame:
+    """Number the residues before the first IMGT position backwards from it.
+
+    The usual convention for leader peptides: counting back from IMGT 1, the residue
+    before it is ``-1`` (there is no 0); counting back from a negative IMGT position
+    (class II G-ALPHA starts at ``-2``) it continues ``-3``, ``-4`` ... So the whole
+    N-terminus, the signal peptide and any mature residues IMGT leaves out (DRB1 has
+    four before IMGT 1), is one run of negative numbers on the same axis;
+    ``topology`` still says which of them are the signal peptide.
+
+    Only applied when the first numbered residue is IMGT ``1`` or a negative position,
+    and everything before it is signal peptide or extracellular. Nothing after a
+    domain (the membrane anchor, the tail) is touched.
     """
+    numbered = [i for i, v in enumerate(num['imgt']) if v != '-']
+    if not numbered or numbered[0] == 0:
+        return num
+    first = numbered[0]
+    label = num['imgt'].iloc[first]
+    if not re.fullmatch(r'-?\d+', label) or int(label) > 1:
+        return num
+    if any(labels[i] not in _LEADER_TOPOLOGY for i in range(first)):
+        return num
+    top = int(label) if int(label) < 0 else 0            # the count skips 0
+    imgt = list(num['imgt'])
+    for i in range(first):
+        imgt[i] = str(top - (first - i))
+    return num.assign(imgt=imgt)
+
+
+def _number_clike(seq: str, num: pd.DataFrame, kind: str | None) -> pd.DataFrame:
+    """`num` with the C-LIKE domain after its last numbered residue added: class I
+    alpha3, class II alpha2 / beta2, or B2M's domain, on IMGT's C-LIKE scheme plus
+    :data:`~tcrkit.cdomain.C_OFFSET` (``'1023'``)."""
+    from .cdomain import MHC_CLIKE_GENES, number_cdomain, offset_label
+
+    if kind is None:
+        genes = [g for k, gs in MHC_CLIKE_GENES.items() if k != 'B2M' for g in gs]
+    else:
+        genes = MHC_CLIKE_GENES[kind]
+    numbered = np.flatnonzero((num['imgt'] != '-').to_numpy())
+    start = int(numbered[-1]) + 1 if len(numbered) and kind != 'B2M' else 0
+    if len(seq) - start < 40:
+        return num
+    c = number_cdomain(seq[start:], genes=genes)
+    inside = np.flatnonzero((c['imgt'] != '-').to_numpy())
+    rows = inside + start
+    num = num.copy()
+    num.loc[rows, 'domain'] = 'C-LIKE'
+    num.loc[rows, 'imgt'] = [offset_label(x) for x in c['imgt'].iloc[inside]]
+    num.loc[rows, 'region'] = c['region'].iloc[inside].to_numpy()
+    num.loc[rows, 'template'] = c['template'].iloc[inside].to_numpy()
+    return num
+
+
+def _number_the_b2m_leader(num: pd.DataFrame, labels) -> pd.DataFrame:
+    """B2M's leader counted back from its first C-LIKE position (``-1`` before 1)."""
     numbered = [i for i, v in enumerate(num['imgt']) if v != '-']
     if not numbered:
         return num
     first = numbered[0]
-    if num['imgt'].iloc[first] != '1' or first == 0:
-        return num
-    if any(labels[i] != 'signal_peptide' for i in range(first)):
-        return num
-    imgt = list(num['imgt'])
-    for i in range(first):
-        imgt[i] = str(i - first)                 # -first ... -1
-    return num.assign(imgt=imgt)
+    plain = num.assign(imgt=['-'] * first + ['1'] + ['-'] * (len(num) - first - 1))
+    lead = _number_the_leader(plain, labels)['imgt'].iloc[:first].tolist()
+    return num.assign(imgt=lead + list(num['imgt'].iloc[first:]))
 
 
-def _annotate_one(seq: str, helix: str, mark_regions: bool = False
-                  ) -> tuple[dict, pd.DataFrame]:
+def _annotate_one(seq: str, helix: str, mark_regions: bool = False,
+                  c_like: bool = False) -> tuple[dict, pd.DataFrame]:
     """``(row of the wide table, per-residue table)`` for one cleaned sequence."""
     if len(seq) < _MHC_MIN_LENGTH:
         return ({ERROR_COL: f'too short for an MHC chain ({len(seq)} residues, needs '
@@ -327,8 +374,14 @@ def _annotate_one(seq: str, helix: str, mark_regions: bool = False
     rec.update({name: spans.get(name) for name, _ in _TOPOLOGY})
 
     domains = gene_domains(gene)
-    if not domains:                                  # B2M: no groove domain to number
-        return {**rec, ERROR_COL: None}, _blank(seq).assign(topology=labels)
+    if not domains:                                  # B2M: no groove domain
+        num = _blank(seq).assign(topology=labels)
+        if c_like:                                   # but a C-LIKE one
+            num = _number_the_b2m_leader(_number_clike(seq, num, 'B2M'), labels)
+            inside = np.flatnonzero((num['domain'] == 'C-LIKE').to_numpy()) + 1
+            if len(inside):
+                rec.update(domains='C-LIKE', domain_spans=_ranges(inside))
+        return {**rec, ERROR_COL: None}, num
 
     num = number_gdomains(seq, domains)
     found = num[num['domain'] != '-']
@@ -340,13 +393,17 @@ def _annotate_one(seq: str, helix: str, mark_regions: bool = False
         return rec, _number_the_leader(num.assign(topology=labels), labels)
     if helix == 'tpm-bench':
         num['helix'] = tpm_bench_helix(seq)
+    num = _number_the_leader(num.assign(topology=labels), labels)
+    if c_like:
+        num = _number_clike(seq, num, mhc_chain(gene))
+        found = num[num['domain'] != '-']
     order = list(dict.fromkeys(found['domain']))
     rec.update(domains=', '.join(order),
                domain_spans=', '.join(_ranges(found.index[found['domain'] == d] + 1)
                                       for d in order),
                helix=_ranges(np.flatnonzero(num['helix'].to_numpy()) + 1),
                **{ERROR_COL: None})
-    return rec, _number_the_leader(num.assign(topology=labels), labels)
+    return rec, num
 
 
 # -------------------------------------------------------------------- segments
@@ -359,7 +416,8 @@ COLLAPSIBLE = ('domain', 'region', 'helix', 'topology')
 
 def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
                  mark_regions: bool = False, col_mapping=None,
-                 squeeze: bool = False, collapse=None) -> pd.DataFrame:
+                 squeeze: bool = False, collapse=None, domains: bool = False,
+                 show=False) -> pd.DataFrame:
     """Which MHC gene each sequence is, its IMGT numbering and its groove helices.
 
     Each sequence is matched to the bundled alleles for its gene and closest allele, then
@@ -380,6 +438,17 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
         per_residue: one row per residue instead of one per sequence.
         collapse: one row per run of residues sharing these per-residue column(s), any of
             :data:`COLLAPSIBLE`; ``True`` means ``['domain', 'region']``.
+        domains: also number the membrane-proximal C-LIKE domain - class I alpha3,
+            class II alpha2 / beta2, and B2M's only domain - on IMGT's C-LIKE scheme
+            (:mod:`tcrkit.cdomain`) plus 1000, so its labels never repeat the G
+            domain's: C-LIKE position 23 is ``'1023'``, ``45.1`` is ``'1045.1'``.
+            Those residues get ``domain`` ``'C-LIKE'`` and their strand / loop in
+            ``region`` (``'A'``, ``'AB'``, ... ``'G'``), and ``'C-LIKE'`` is listed in
+            ``domains`` / ``domain_spans``. B2M's leader is numbered back from it.
+        show: print each sequence with its annotation under it
+            (:func:`tcrkit.print_residues`, in colour) and return None, instead of a table.
+            ``True``, or a dict of ``print_residues`` options, e.g.
+            ``{'width': None}``, ``{'color': False}``.
         mark_regions: add ``topology_seq``, one letter per residue (``S``/``O``/``M``/
             ``I``/``-``), as in :func:`tcrkit.mhc_sequence`.
         col_mapping: where the sequence lives in a frame, e.g. ``{'sequence': 'mhc_seq'}``.
@@ -414,9 +483,9 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
         if not seq or not re.fullmatch(r'[A-Z]+', seq):
             recs.append({ERROR_COL: 'not an amino-acid sequence'})
             continue
-        rec, num = _annotate_one(seq, helix, mark_regions)
+        rec, num = _annotate_one(seq, helix, mark_regions, domains)
         recs.append(rec)
-        if per_residue:
+        if per_residue or show:
             part = num.drop(columns='template')
             part.insert(0, 'position', np.arange(1, len(num) + 1))
             part.insert(2, 'gene', rec.get('gene'))
@@ -424,12 +493,14 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
             part.index = [idx] * len(part)
             parts.append(part)
             templates[idx] = '; '.join(t for t in dict.fromkeys(num['template']) if t)
+    if show:
+        from .display import show as _show
+        return _show(pd.concat(parts), show) if parts else None
     if per_residue:
         out = (pd.concat(parts) if parts else pd.DataFrame(columns=_RESIDUE_COLUMNS))
-        out.attrs['templates'] = templates
         if collapse is not None:
             out = _segments(out, collapse)
-            out.attrs['templates'] = templates
+        out.attrs['templates'] = templates
         return _squeeze(out) if squeeze else out
     columns = list(_COLUMNS)
     if mark_regions:

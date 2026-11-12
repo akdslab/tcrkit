@@ -13,7 +13,8 @@ tcrkit.mhc_sequence('DRA*01:02', source='decodertcr')         # other source
 tcrkit.annotate_mhc(seq)                                      # gene, allele, domains, helix
 tcrkit.annotate_mhc(seq, collapse=True)                       # strands A-D, turns, helix
 tcrkit.annotate_mhc(seq, collapse='topology')                 # signal peptide .. tail
-tcrkit.print_residues(tcrkit.annotate_mhc(seq, per_residue=True), color=True)
+tcrkit.annotate_mhc(seq, per_residue=True, domains=True)      # + alpha3/beta2/B2M, C-LIKE + 1000
+tcrkit.annotate_mhc(seq, show=True)                           # prints it (colour) (print_residues); returns None
 tcrkit.list_mhc('genes'); tcrkit.list_mhc('pairs', source='decodertcr')
 tcrkit.imgt_regions()          # IMGT ranges of CDRs + helices, with sources (all_regions=True)
 ```
@@ -28,5 +29,9 @@ tcrkit.imgt_regions()          # IMGT ranges of CDRs + helices, with sources (al
   The `helix` column (docking-angle residues, IMGT 50/52-86) is narrower than
   `region == 'helix'` (IMGT's whole 50-92). Use the `helix` column as the reference
   for the groove helices; "helix" elsewhere means the column.
-  IMGT 1 = first residue after the signal peptide; leader numbered `-24`..`-1`.
+  The N-terminus is numbered backwards from the first IMGT position (class I leader
+  `-24`..`-1`; DRA continues from IMGT -2; DRB1's 4 extra mature residues are `-4`..`-1`);
+  `topology` says which are signal peptide. α3 / α2 / β2 and B2M stay `'-'`
+  unless `domains=True`: then IMGT C-LIKE + 1000 (`domain == 'C-LIKE'`, Cys
+  `1023`/`1104`). The membrane anchor and tail always stay `'-'`.
 - Full reference: `docs/api.md`.

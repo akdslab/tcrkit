@@ -47,6 +47,7 @@ import pandas as pd
 
 from ._util import (ERROR_COL, collapse_columns, collect, is_empty, progress, segments,
                     squeeze as _squeeze)
+from .display import show as _show
 
 __all__ = ['anarci', 'CDR_IMGT_LOCS', 'IMGT_REGIONS', 'COLLAPSIBLE', 'ERROR_ROW',
            'read_sequences', 'backend']
@@ -347,8 +348,15 @@ def _imgt_region(label) -> str:
     return next((name for name, (lo, hi) in IMGT_REGIONS.items() if lo <= n <= hi), '')
 
 
-def _per_residue(inp: pd.DataFrame, numbered: pd.DataFrame) -> pd.DataFrame:
-    """One row per residue of each input sequence, with its IMGT label and region."""
+def _per_residue(inp: pd.DataFrame, numbered: pd.DataFrame,
+                 domains: bool = False) -> pd.DataFrame:
+    """One row per residue of each input sequence, with its IMGT label and region.
+
+    With `domains`, also ``domain`` / ``gene_segment`` and the constant domain numbered
+    (:mod:`tcrkit.tcr_domains`).
+    """
+    from .tcr_domains import mark_domains
+
     parts = []
     for idx, seq in zip(inp.index, inp['sequence']):
         seq = '' if is_empty(seq) else str(seq)
@@ -360,18 +368,64 @@ def _per_residue(inp: pd.DataFrame, numbered: pd.DataFrame) -> pd.DataFrame:
                 if 0 <= start + k < len(seq):
                     imgt[start + k] = str(label)
         chain = row['chain_type'] if row is not None else '-'
-        part = pd.DataFrame({'position': range(1, len(seq) + 1), 'aa': list(seq),
-                             'chain_type': chain, 'imgt': imgt,
-                             'region': [_imgt_region(x) if x != '-' else '' for x in imgt]},
-                            index=[idx] * len(seq))
-        parts.append(part)
+        region = [_imgt_region(x) if x != '-' else '' for x in imgt]
+        cols = {'position': range(1, len(seq) + 1), 'aa': list(seq), 'chain_type': chain,
+                'imgt': imgt, 'region': region}
+        if domains:
+            numbered_ok = row is not None and isinstance(row.get('imgt_dict'), dict)
+            dom, seg, cols['imgt'], cols['region'] = mark_domains(
+                seq, imgt, region, row if numbered_ok else None)
+            cols.update(domain=dom, gene_segment=seg)
+        parts.append(pd.DataFrame(cols, index=[idx] * len(seq)))
     cols = ['position', 'aa', 'chain_type', 'imgt', 'region']
+    if domains:
+        cols += ['domain', 'gene_segment']
     return pd.concat(parts) if parts else pd.DataFrame(columns=cols)
+
+
+def _spans(positions) -> str:
+    """1-based positions -> ``'20-131'``."""
+    return f'{positions[0]}-{positions[-1]}'
+
+
+def _add_marks(out: pd.DataFrame, res: pd.DataFrame, domains: bool,
+               mark_regions: bool) -> pd.DataFrame:
+    """The per-sequence table with the per-residue marks summed up on each row."""
+    from .display import mark_string
+
+    out = out.copy()
+    cols = {}
+    for idx in out.index:
+        if idx not in res.index:
+            continue
+        r = res.loc[[idx]]
+        rec = {}
+        if domains:
+            dom = r['domain'].tolist()
+            order = [d for d in dict.fromkeys(dom) if d != '-']
+            pos = r['position'].tolist()
+            rec['domains'] = ', '.join(order) or None
+            rec['domain_spans'] = ', '.join(
+                _spans([p for p, d in zip(pos, dom) if d == name]) for name in order) or None
+        if mark_regions:
+            rec['region_seq'] = mark_string(r['region'], 'region')
+            if domains:
+                rec['segment_seq'] = mark_string(r['gene_segment'], 'gene_segment')
+        cols[idx] = rec
+    extra = pd.DataFrame.from_dict(cols, orient='index')
+    names = (['domains', 'domain_spans'] if domains else []) + \
+        (['region_seq'] + (['segment_seq'] if domains else []) if mark_regions else [])
+    extra = extra.reindex(index=out.index, columns=names)
+    where = list(out.columns).index(ERROR_COL) if ERROR_COL in out.columns else len(out.columns)
+    for k, name in enumerate(names):
+        out.insert(where + k, name, extra[name])
+    return out
 
 
 def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=False,
            separate_index=False, mute=True, raise_error=False, use_pyhmmer=None,
            squeeze: bool = False, per_residue: bool = False, collapse=None,
+           domains: bool = False, mark_regions: bool = False, show=False,
            **anarci_kwargs) -> pd.DataFrame:
     """IMGT-number protein sequences. Returns one row per input sequence.
 
@@ -411,6 +465,26 @@ def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=Fa
             FR4 with their ``start`` / ``end`` (1-based), ``length``, ``imgt_start`` /
             ``imgt_end`` and ``sequence``. ``True`` means ``'region'``. Implies
             `per_residue`.
+        domains: mark the whole TCR chain, not just its V domain. Per residue (with
+            `per_residue` / `collapse`): adds ``domain`` (``'V'``, ``'C'``, ``'-'``)
+            and ``gene_segment`` (``'L'`` = the V gene's leader, ``'V'``, ``'J'``,
+            ``'N/D'``, ``'C'``, ``'-'``; the V/J boundary inside the CDR3 is the longest match to the called germlines,
+            so it can be a residue or two off), and numbers the constant domain on
+            IMGT's C-DOMAIN scheme plus 1000 (C position 23 is ``'1023'``), with its
+            strand in ``region``. Both columns can be collapsed on. Per sequence: adds
+            ``domains`` (``'V, C'``) and ``domain_spans`` (``'20-131, 132-260'``),
+            as :func:`tcrkit.annotate_mhc` does. See :mod:`tcrkit.tcr_domains`.
+        mark_regions: per sequence, add ``region_seq``, one character per residue of
+            the sequence: ``1`` / ``2`` / ``3`` for the CDRs, ``f`` for framework,
+            ``-`` outside the V domain (with `domains`, the constant domain's strands
+            ``A`` ... ``G``); and with `domains` also ``segment_seq``: ``L``, ``V``,
+            ``J``, ``n`` (N/D), ``C`` or ``-``. Like ``topology_seq`` of
+            :func:`tcrkit.annotate_mhc`. Ignored with `per_residue` / `collapse`.
+        show: print each sequence with its annotation under it
+            (:func:`tcrkit.print_residues`, in colour) and return None, instead of a table.
+            ``True``, or a dict of ``print_residues`` options, e.g.
+            ``show={'width': None}``. The other options still apply
+            (``domains=True`` adds the V / J / C lines).
         mute: keep ANARCI's own stdout/stderr chatter quiet.
         raise_error: re-raise instead of returning an error row for a sequence that
             cannot be numbered.
@@ -435,7 +509,8 @@ def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=Fa
     inp = collect(('sequence',), (sequences,), col_mapping=col_mapping)
     items = list(zip(inp.index, inp['sequence']))
 
-    collapse = collapse_columns(collapse, COLLAPSIBLE, default='region')
+    allowed = COLLAPSIBLE + (('domain', 'gene_segment') if domains else ())
+    collapse = collapse_columns(collapse, allowed, default='region')
     if collapse is not None:
         per_residue = True
     if per_residue:
@@ -445,17 +520,29 @@ def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=Fa
         out = _number(items, progress_bar=progress_bar, include_imgt_index=True,
                       mute=mute, raise_error=raise_error, use_pyhmmer=use_pyhmmer,
                       **anarci_kwargs)
-        res = _per_residue(inp, out)
+        res = _per_residue(inp, out, domains=domains)
+        if show:
+            return _show(res, show)
         if collapse is not None:
             res = segments(res, collapse)
         return _squeeze(res) if squeeze else res
 
+    marks = (domains or mark_regions) and not separate_index
+    need = (marks or bool(show)) and not separate_index
     out = _number(items, progress_bar=progress_bar,
-                  include_imgt_index=include_imgt_index or separate_index,
+                  include_imgt_index=include_imgt_index or separate_index or need,
                   separate_index=separate_index, mute=mute, raise_error=raise_error,
                   use_pyhmmer=use_pyhmmer, **anarci_kwargs)
     if separate_index:
         return out
+    if need:
+        res = _per_residue(inp, out, domains=domains)
+        if show:
+            return _show(res, show)
+        if marks:
+            out = _add_marks(out, res, domains, mark_regions)
+        if not include_imgt_index:
+            out = out.drop(columns=['imgt_dict'], errors='ignore')
     out = out.drop(columns=['query_name'], errors='ignore')
     res = pd.concat([inp.reindex(out.index), out], axis=1)
     return _squeeze(res, ('sequence',)) if squeeze else res

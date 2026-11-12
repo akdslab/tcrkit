@@ -16,6 +16,9 @@ tcrkit.add_cdr3_junctions('ASSIRSSYEQY', 'TRBJ2-7')       # restore C104/F118 fi
 tcrkit.stitch('TRBV19', 'TRBJ2-7', 'CASSIRSSYEQYF', chain='beta')   # ...then stitch
 tcrkit.anarci(seq, allow={'A', 'B'})                      # V/J genes, CDR1-3
 tcrkit.anarci(seq, allow={'A', 'B'}, collapse=True)       # FR1..FR4 / CDR segments
+tcrkit.anarci(seq, allow={'A', 'B'}, collapse='gene_segment', domains=True)  # leader/V/N-D/J/C
+tcrkit.anarci(seq, allow={'A', 'B'}, domains=True, show=True)   # prints seq with V/J/C, CDR lines; returns None
+tcrkit.anarci(seq, allow={'A', 'B'}, domains=True, mark_regions=True)  # region_seq, segment_seq
 tcrkit.build_tcr_pmhc(df)                                 # all steps, self-checked
 ```
 
@@ -25,6 +28,10 @@ tcrkit.build_tcr_pmhc(df)                                 # all steps, self-chec
   `build_tcr_pmhc` as `{chain}_sequence_nt`).
 - `anarci`: if looking for alpha/beta chains pass `allow={'A','B'}`, else an alpha
   chain can come back as delta. `CDR3_aa` is IMGT 105-117 (no C/F).
+  `domains=True`: per residue `domain` V/C, `gene_segment` L(eader)/V/J/N-D/C; per sequence
+  `domains` / `domain_spans`. The C domain is IMGT C-DOMAIN + 1000 (`'1023'`); V/J
+  split in the CDR3 = longest germline match (Stitchr's full J if installed), can be a
+  residue off. Genes next to per-residue rows: `res.join(anarci(seq)[['v_gene']])`.
 - `normalize_tcr`: a valid but wrong `species` silently changes the gene; leave it unset.
 - `build_tcr_pmhc` expects `alpha_v/alpha_j/alpha_cdr3`, `beta_*`, `mhc_a` (`mhc_b`).
 - Full reference: `docs/api.md`.

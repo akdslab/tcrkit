@@ -101,6 +101,9 @@ IMGT-numbers protein sequences and reports their V/J genes and CDR loops.
 | `raise_error` | raise instead of returning an error row for a sequence that will not number |
 | `per_residue` | one row per residue instead: `position`, `aa`, `chain_type`, `imgt` (`'-'` outside the V domain), `region` (`FR1`, `CDR1`, … `FR4`; `''` outside) |
 | `collapse` | one row per segment instead: `collapse='region'` (or `True`) gives FR1, CDR1, … FR4, each with `start` / `end` (1-based), `length`, `imgt_start` / `imgt_end` and `sequence` |
+| `domains` | mark the whole TCR chain, not only its V domain. Per residue (`per_residue` / `collapse`): adds `domain` (`V`, `C`, `-`) and `gene_segment` (`L` = the V gene's leader, `V`, `J`, `N/D`, `C`, `-`), and numbers the constant domain on IMGT's C-DOMAIN scheme **plus 1000** (C position 23 → `'1023'`, `45.1` → `'1045.1'`), with its strand / loop in `region`; both columns can be collapsed on. Per sequence: adds `domains` (`'V, C'`) and `domain_spans` (`'20-131, 132-260'`). CLI `--domains`. See below |
+| `mark_regions` | per sequence, add `region_seq`: one character per residue, `1` / `2` / `3` for the CDRs, `f` framework, `-` outside the V domain (with `domains`, the C strands `A`…`G`); with `domains` also `segment_seq` (`L`, `V`, `J`, `n` = N/D, `C`, `-`). Like `annotate_mhc`'s `topology_seq`. CLI `--mark-regions` |
+| `show` | print each sequence with its annotation under it (`print_residues`, in colour) and return nothing, instead of a table. `True`, or a dict of `print_residues` options: `show={'width': None}`, `show={'color': False}`. With `domains=True` it adds the V / J / C lines |
 | `use_pyhmmer` | force the in-process pyhmmer backend on (`True`) or off (`False`); `None` (default) uses it only when no `hmmscan` binary is on PATH. Only the process's first call decides. The `ANARCI_USE_PYHMMER=1`/`0` environment variable does the same |
 | `**anarci_kwargs` | anything else goes to ANARCI's `run_anarci` — `allow` itself, `scheme=`, `assign_germline=`, `ncpu=` |
 
@@ -108,6 +111,58 @@ IMGT-numbers protein sequences and reports their V/J genes and CDR loops.
 
 Out: `CDR1/2/3_aa` with their 1-based `_start` / `_end`, `v_gene` / `j_gene` and their
 identities, `species`, `chain_type`, `query_start` / `query_end`, `error`.
+
+**`domains=True`: V, J and C on the whole chain.** ANARCI only numbers the V domain.
+With `domains=True` every residue also says which part of the chain it is:
+
+```python
+full = tcrkit.stitch('TRBV19', 'TRBJ2-7', 'CASSIRSSYEQYF', chain='beta', squeeze=True)['sequence_aa']
+tcrkit.anarci(full, allow={'A', 'B'}, collapse='gene_segment', domains=True)
+#   gene_segment  start  end  sequence
+#              L      1   19  MSNQVLCCVVLCFLGANTV        leader (TRBV19's)
+#              V     20  114  DGGITQSPKY...CASSI
+#            N/D    115  116  RS
+#              J    117  131  SYEQYFGPGTRLTVT
+#              C    132  260  EDLNKVFPPE...EAWGRA     constant domain, IMGT 1001.8-1125
+#              -    261  308  DCGFTSVSYQ...          membrane and tail
+```
+
+Three ways to look at it:
+
+```python
+tcrkit.anarci(full, allow={'A', 'B'}, per_residue=True, domains=True)   # one row per residue
+tcrkit.anarci(full, allow={'A', 'B'}, domains=True, show=True)   # prints the sequence with lines under it
+tcrkit.anarci(full, allow={'A', 'B'}, domains=True, mark_regions=True)  # one row: region_seq, segment_seq
+```
+
+```
+              101       111       121       131       141
+sequence      QKNPTAFYLCASSIRSSYEQYFGPGTRLTVTEDLNKVFPPEVAVFEPSEA
+gene_segment  VVVVVVVVVVVVVVnnJJJJJJJJJJJJJJJCCCCCCCCCCCCCCCCCCC
+region        ffffffffff33333333333ffffffffffAAAAAAAAAAAAAAAAAAA
+```
+
+The per-residue table has one row per residue; to see each sequence's genes next to
+it, join the per-sequence table on the index:
+`res.join(tcrkit.anarci(full, allow={'A', 'B'})[['v_gene', 'j_gene']])`.
+
+- **Constant domain:** numbered on IMGT's C-DOMAIN entries (TRAC, TRBC2, TRGC1, TRDC;
+  human and mouse) by alignment, like `annotate_mhc`'s G domains. The C-DOMAIN scheme
+  also runs 1–128, so **1000 is added** to keep its labels apart from the V domain's in
+  the one `imgt` column: `'1023'` and `'1104'` are the C domain's conserved Cys. Antibody
+  chains have no bundled constant template, so theirs stays `'-'`.
+- **Leader (`L`):** the residues before the V domain that match the called V gene's
+  leader (IMGT L-PART1 + L-PART2, from Stitchr's data), counting back from the V domain.
+  Anything else there (a tag, another gene's leader) stays `-`. If ANARCI calls a
+  different V gene than the one in the chain, the leader usually stays `-` too.
+- **V / J inside the CDR3:** up to IMGT 104 is V, from 118 on is J. Inside the CDR3 the
+  V gene runs on while residues equal the called V germline (ANARCI's), and the J gene
+  counting back from 118 while they equal the called J germline. The full J germline comes
+  from Stitchr's IMGT data (installed by `stitchrdl -s human`); without it, ANARCI's
+  shorter J germlines are used and J starts at IMGT 115 at the earliest. What matches
+  neither is `N/D`: non-templated residues, or a D gene. It is the longest germline match,
+  so a non-templated residue that happens to equal the germline is counted as germline;
+  the boundary can be a residue or two off.
 
 > **If you are looking for alpha/beta chains, pass `allow={'A','B'}`.** The alpha and delta
 > loci overlap, so an unrestricted alpha chain can come back as `chain_type` `D` with a
@@ -367,10 +422,47 @@ or `'-'`).
 `mark_regions=True` adds `topology_seq`, one letter per residue in the same alphabet as
 `mhc_sequence` (`S` / `O` / `M` / `I` / `-`), estimated from the matched allele.
 
-Signal-peptide residues are numbered **backwards from IMGT 1** — `-24` … `-1` — the
-usual convention for leaders. Everything else outside the G domains stays `'-'`: the
-C-like α3 domain, the membrane anchor and the cytoplasmic tail belong to other IMGT
-schemes, and numbering them here would mix two coordinate frames in one column.
+Everything before the first IMGT position is numbered **backwards from it**, the usual
+convention for leaders. Class I starts at IMGT 1, so its signal peptide is `-24` … `-1`
+(there is no 0). Class II alpha chains start at IMGT `-2` (IMGT's own G-ALPHA label), so
+DRA's leader continues `-27` … `-3`. Some chains have mature residues IMGT leaves out
+before position 1 (DRB1: `GDTR`); they get the same run (`-4` … `-1`, then the signal
+peptide `-33` … `-5`). `topology` still tells which of them are signal peptide. Only
+done when everything before is signal peptide or extracellular. The membrane anchor and
+the cytoplasmic tail stay `'-'`, and so does the C-like domain unless `domains=True`.
+
+**`domains=True`: the C-LIKE domain too.** Off by default, the membrane-proximal domain
+— class I α3, class II α2 / β2 — and B2M (which has no groove) stay unnumbered. With
+`domains=True` it is numbered on IMGT's C-LIKE-DOMAIN scheme (positions 1–128, with 46–76
+absent and insertions such as `45.1`, `85.1`) **plus 1000**, as for the TCR constant
+domain, so its labels never repeat the G domain's in the one `imgt` column:
+
+```python
+s = tcrkit.mhc_sequence('A*02:01', region='full', squeeze=True)['sequence']
+tcrkit.annotate_mhc(s, collapse='domain', domains=True)
+#      domain  start  end imgt_start imgt_end
+#           -      1   24        -24       -1     signal peptide
+#    G-ALPHA1     25  114          1       90
+#    G-ALPHA2    115  206          1       92
+#      C-LIKE    207  298      1001    1121     alpha3
+#           -    299  365                         membrane and tail
+```
+
+Those residues get `domain` `'C-LIKE'` and `region` the strand or loop (`A`, `AB`, `B`,
+`BC`, `C`, `CD`, `D`, `DE`, `E`, `EF`, `F`, `FG`, `G`); the conserved disulfide Cys are
+at `1023` and `1104`. `domains` / `domain_spans` list `C-LIKE` too. Nothing else
+changes: groove, helices and leader are the same as without it. B2M's leader is
+numbered back from its first C-LIKE residue (`-2`, `-1`, `1001`). CLI `--domains`.
+
+`show=True` prints each sequence with its annotation under it (`print_residues`, in
+colour) and returns nothing; pass a dict for `print_residues` options:
+`tcrkit.annotate_mhc(s, domains=True, show={'width': None})`.
+The templates (`imgt_cdomains.csv`, also holding TR / IG constant
+and MHC α3 / β2 domains) come from IMGT's
+[C-DOMAIN page](https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/C-DOMAIN/CLdomains.html);
+`python -m tcrkit._build.fetch_imgt_cdomains` rebuilds them, and
+`tcrkit.cdomain.number_cdomain(seq, genes=['B2M'])` numbers one sequence directly (no
+offset).
 
 > **The allele is approximate.** Only 184 alleles are searched, so `allele` is the closest
 > of those, not a typing result. `allele_identity` = 1.0 means an exact match over the
@@ -423,7 +515,7 @@ mhc_chain('DRB1')                # 'beta'
 
 ---
 
-### `print_residues(residues, columns=None, width=60)`
+### `print_residues(residues, columns=None, width=60, file=None, color=False)`
 
 Prints a per-residue table — from `annotate_mhc` or `anarci` with `per_residue=True` —
 as the sequence on one line and each annotation on the line under it, with a position
@@ -438,8 +530,11 @@ tcrkit.print_residues(tcrkit.annotate_mhc(seq, per_residue=True))
 # region                            AAAAAAAAAAAAAA...BBBBBBBBBBB..CCCCCC
 ```
 
-`columns=` picks the lines (default: whichever of `topology`, `domain`, `region`, `helix`
-the table has); `SYMBOLS` says which character stands for what. `color=True` colours the
+`show=True` on `anarci` / `annotate_mhc` prints the same in one call, without
+`per_residue=True`, coloured by default: `tcrkit.annotate_mhc(seq, show=True)`. `width=` is residues per line; `width=None` puts each sequence on one
+line. `columns=` picks the lines (default: whichever of `topology`, `domain`, `gene_segment`,
+`region`, `helix` the table has; `domain` is left out when `gene_segment` is there, as on a
+TCR it says the same); `SYMBOLS` says which character stands for what. `color=True` colours the
 residues and the `region` line by region (strands blue, turns grey, helix red, CDRs
 yellow / green / magenta); `color='topology'` colours by another line. Terminals and
 Jupyter show the colours.

@@ -181,10 +181,11 @@ def _cmd_anarci(args):
     extra = {'allow': set(args.allow)} if args.allow else {}
     if args.per_residue or args.collapse:
         out = anarci(seqs, progress_bar=not args.quiet, per_residue=True,
-                     collapse=args.collapse, **extra)
+                     collapse=args.collapse, domains=args.domains, **extra)
         return _emit(out, args)
     out = anarci(seqs, progress_bar=not args.quiet,
-                 include_imgt_index=args.include_imgt, **extra)
+                 include_imgt_index=args.include_imgt, domains=args.domains,
+                 mark_regions=args.mark_regions, **extra)
     if args.in_csv and args.join:
         out = df.join(out.drop(columns=['sequence'], errors='ignore'),
                       rsuffix='_anarci')
@@ -213,9 +214,17 @@ def _add_anarci(sub):
                    help='add an imgt_dict column of position -> residue')
     p.add_argument('--per-residue', action='store_true',
                    help='one row per residue: IMGT label and region (FR1 ... FR4)')
-    p.add_argument('--collapse', nargs='+', metavar='COLUMN', choices=['region'],
+    p.add_argument('--collapse', nargs='+', metavar='COLUMN',
+                   choices=['region', 'domain', 'gene_segment'],
                    help="one row per segment of consecutive residues sharing this "
-                        "column: 'region' gives FR1, CDR1, ... FR4")
+                        "column: 'region' gives FR1, CDR1, ... FR4; 'domain' and "
+                        "'gene_segment' need --domains")
+    p.add_argument('--domains', action='store_true',
+                   help='mark V / J / C and number the constant domain (IMGT C-DOMAIN '
+                        '+ 1000); per sequence, adds domains / domain_spans')
+    p.add_argument('--mark-regions', action='store_true',
+                   help='add region_seq (and with --domains segment_seq): one '
+                        'character per residue')
     p.add_argument('--join', action='store_true',
                    help='join the results onto the input columns (--in-csv only)')
     p.set_defaults(func=_cmd_anarci)
@@ -409,7 +418,7 @@ def _cmd_annotate_mhc(args):
         seqs = list(args.seq)
     residues = args.per_residue or bool(args.collapse)
     out = annotate_mhc(seqs, helix=args.helix, per_residue=args.per_residue,
-                       collapse=args.collapse)
+                       collapse=args.collapse, domains=args.domains)
     if not residues and not (args.out_csv or args.json):
         out = out.drop(columns=['sequence'])
     _emit(out, args, index=bool(args.in_csv) or residues)
@@ -435,6 +444,9 @@ def _add_annotate_mhc(sub):
                    choices=['domain', 'region', 'helix', 'topology'],
                    help='one row per segment of consecutive residues sharing these '
                         'columns, e.g. --collapse domain region, or topology')
+    p.add_argument('--domains', action='store_true',
+                   help='also number the C-LIKE domain (alpha3, alpha2 / beta2, B2M) '
+                        'on IMGT C-LIKE + 1000')
     p.add_argument('--in-csv', help='CSV/TSV with a column of sequences')
     p.add_argument('--seq-col', default='sequence', help='(default: sequence)')
     p.set_defaults(func=_cmd_annotate_mhc)

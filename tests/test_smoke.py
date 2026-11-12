@@ -11,6 +11,7 @@ to match tcrkit's output, so a regression here means behaviour drifted from the 
 these were ported from.
 """
 
+import re
 import pandas as pd
 import pytest
 
@@ -945,6 +946,102 @@ def test_anarci_collapse_region_agrees_with_the_cdr_columns():
         == ALPHA_AA
 
 
+# TRBV19 / TRBJ2-7 / CASSIRSSYEQYF as stitch builds it: leader, V, J, TRBC2 with its tail
+FULL_BETA = ('MSNQVLCCVVLCFLGANTVDGGITQSPKYLFRKEGQNVTLSCEQNLNHDAMYWYRQDPGQGLRLIYYSQIVNDFQKGDIA'
+             'EGYSVSREKKESFPLTVTSAQKNPTAFYLCASSIRSSYEQYFGPGTRLTVTEDLNKVFPPEVAVFEPSEAEISHTQKATL'
+             'VCLATGFFPDHVELSWWVNGKEVHSGVSTDPQPLKEQPALNDSRYCLSSRLRVSATFWQNPRNHFRCQVQFYGLSENDEW'
+             'TQDRAKPVTQIVSAEAWGRADCGFTSVSYQQGVLSATILYEILLGKATLYAVLVSALVLMAMVKRKDF')
+
+
+def test_anarci_domains_marks_v_j_and_numbers_the_constant_domain():
+    res = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, per_residue=True, domains=True)
+    assert list(res.columns[-2:]) == ['domain', 'gene_segment']
+    cdr3 = res[res['region'] == 'CDR3']
+    assert ''.join(cdr3['aa']) == 'ASSIRSSYEQY'
+    # V germline CASSI, J germline SYEQY (TRBJ2-7), RS in between
+    assert ''.join(g[0] for g in cdr3['gene_segment']) == 'VVVVNNJJJJJ'
+    cys = res[(res['aa'] == 'C') & (res['domain'] != '-')]
+    assert cys[['domain', 'imgt']].values.tolist() == [['V', '23'], ['V', '104'],
+                                                       ['C', '1023'], ['C', '1085.1'],
+                                                       ['C', '1104']]   # TRBC's free Cys
+    assert res.loc[res['imgt'] == '1023', 'region'].item() == 'B'
+    seg = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, collapse='gene_segment', domains=True)
+    assert seg['gene_segment'].tolist() == ['L', 'V', 'N/D', 'J', 'C', '-']
+    assert seg.set_index('gene_segment').loc['L', 'sequence'] == 'MSNQVLCCVVLCFLGANTV'
+    assert ''.join(seg['sequence']) == FULL_BETA
+    assert seg.set_index('gene_segment').loc['J', 'sequence'] == 'SYEQYFGPGTRLTVT'
+
+
+def test_anarci_domains_is_opt_in():
+    plain = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, per_residue=True)
+    assert list(plain.columns) == ['position', 'aa', 'chain_type', 'imgt', 'region']
+    marked = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, per_residue=True, domains=True)
+    v = marked['domain'] != 'C'
+    assert marked.loc[v, plain.columns].equals(plain[v.to_numpy()])   # V side unchanged
+    with pytest.raises(ValueError, match='collapse takes'):
+        tcrkit.anarci(FULL_BETA, collapse='gene_segment')
+    bad = tcrkit.anarci('NOTATCR', per_residue=True, domains=True)
+    assert set(bad['domain']) == {'-'} and set(bad['gene_segment']) == {'-'}
+
+
+def test_anarci_domains_and_mark_regions_per_sequence():
+    plain = tcrkit.anarci(FULL_BETA, allow={'A', 'B'})
+    out = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, domains=True, mark_regions=True)
+    new = ['domains', 'domain_spans', 'region_seq', 'segment_seq']
+    assert list(out.columns) == [c for c in plain.columns if c != 'error'] + new + ['error']
+    assert out[plain.columns].equals(plain)                    # nothing else changes
+    row = out.iloc[0]
+    assert row[['domains', 'domain_spans']].tolist() == ['V, C', '20-131, 132-260']
+    assert len(row['region_seq']) == len(row['segment_seq']) == len(FULL_BETA)
+    start = row['CDR3_aa_start'] - 1
+    assert row['region_seq'][start:row['CDR3_aa_end']] == '3' * len(row['CDR3_aa'])
+    assert row['region_seq'][:19] == '-' * 19 and row['region_seq'][19] == 'f'
+    assert row['segment_seq'][start:row['CDR3_aa_end']] == 'VVVVnnJJJJJ'
+    only = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, mark_regions=True)
+    assert 'segment_seq' not in only and set(only['region_seq'][0][131:]) == {'-'}
+    assert 'imgt_dict' not in only
+    bad = tcrkit.anarci('NOTATCR', domains=True, mark_regions=True).iloc[0]
+    assert pd.isna(bad['domains']) and bad['region_seq'] == '-' * 7
+
+
+def test_print_residues_on_a_marked_tcr():
+    import io
+    res = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, per_residue=True, domains=True)
+    buf = io.StringIO()
+    tcrkit.print_residues(res, file=buf)
+    lines = [ln.split()[0] for ln in buf.getvalue().splitlines() if ln.strip()]
+    assert 'gene_segment' in lines and 'region' in lines and 'domain' not in lines
+    buf = io.StringIO()
+    tcrkit.print_residues(res, columns=['domain'], file=buf)
+    assert 'domain' in buf.getvalue()
+
+
+def test_anarci_domains_marks_only_a_matching_leader():
+    tag = 'GSAWSHPQFEK' + FULL_BETA[19:]                       # a tag, not TRBV19's leader
+    res = tcrkit.anarci(tag, allow={'A', 'B'}, per_residue=True, domains=True)
+    assert set(res['gene_segment'].iloc[:11]) == {'-'}
+    # a human chain ANARCI calls mouse still gets its leader (both species are tried)
+    s = tcrkit.stitch('TRAV9-1', 'TRAJ23', 'CAVNTGGGNKLTF', chain='alpha', squeeze=True)['sequence_aa']
+    res = tcrkit.anarci(s, allow={'A', 'B'}, per_residue=True, domains=True)
+    first = int((res['domain'] == 'V').to_numpy().argmax())
+    assert (res['gene_segment'].iloc[:first] == 'L').all()
+
+
+def test_anarci_domains_without_stitchr_data_uses_anarcis_short_j(monkeypatch):
+    from tcrkit import tcr_domains
+    monkeypatch.setattr(tcr_domains, '_stitchr_j', lambda species: {})
+    res = tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, per_residue=True, domains=True)
+    cdr3 = res[res['region'] == 'CDR3']
+    assert ''.join(g[0] for g in cdr3['gene_segment']) == 'VVVVNNNNJJJ'   # from IMGT 115
+
+
+def test_cli_anarci_domains(capsys):
+    from tcrkit.cli import main
+    assert main(['anarci', '--seq', FULL_BETA, '--allow', 'B', '--collapse', 'gene_segment',
+                 '--domains', '--quiet']) == 0
+    assert 'N/D' in capsys.readouterr().out
+
+
 def test_anarci_collapse_rejects_unknown_columns():
     with pytest.raises(ValueError, match='collapse takes'):
         tcrkit.anarci(ALPHA_AA, collapse='topology')
@@ -978,3 +1075,21 @@ def test_build_tcr_pmhc_squeeze_gives_the_row():
     # several rows: unchanged
     assert isinstance(tcrkit.build_tcr_pmhc(PMHC_RAW, progress_bar=False, squeeze=True),
                       pd.DataFrame)
+
+
+def test_show_prints_and_returns_nothing(capsys):
+    assert tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, domains=True, show=True) is None
+    printed = capsys.readouterr().out
+    assert 'gene_segment' in printed and 'region' in printed
+    assert '\033[' in printed                                     # colour by default
+    tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, show={'color': False})
+    assert '\033[' not in capsys.readouterr().out
+    assert tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, show={'width': None}) is None
+    printed = capsys.readouterr().out
+    plain = re.sub(r'\033\[\d*m', '', printed)
+    assert FULL_BETA in plain and 'gene_segment' not in plain       # one line, V only
+    mhc = tcrkit.mhc_sequence('A*02:01', squeeze=True)['sequence']
+    assert tcrkit.annotate_mhc(mhc, show=True) is None
+    assert 'topology' in capsys.readouterr().out
+    tcrkit.anarci(FULL_BETA, allow={'A', 'B'})
+    assert capsys.readouterr().out == ''                         # off by default

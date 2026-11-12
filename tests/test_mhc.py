@@ -255,3 +255,97 @@ def test_collapse_into_segments():
 
     with pytest.raises(ValueError, match='collapse takes'):
         tcrkit.annotate_mhc(HLA_A2, collapse='aa')
+
+
+# ------------------------------------------- the leader, domains=True (C-LIKE)
+
+def _negatives(res):
+    return [v for v in res['imgt'] if v.startswith('-') and v != '-']
+
+
+def test_class_ii_leader_counts_back_from_the_first_imgt_position():
+    # DRA's G-ALPHA starts at IMGT -2 (IMGT's own label), so the leader goes on to -3 ...
+    full = tcrkit.mhc_sequence('DRA*01:01', region='full', squeeze=True)['sequence']
+    res = tcrkit.annotate_mhc(full, per_residue=True).reset_index(drop=True)
+    assert list(res['imgt'][:28]) == [str(-n) for n in range(27, 0, -1)] + ['1']
+    assert (res['topology'][:25] == 'signal_peptide').all()
+
+    # DRB1: four mature residues before IMGT 1, numbered on the same run as the leader
+    full = tcrkit.mhc_sequence('DRB1*04:01', region='full', squeeze=True)['sequence']
+    res = tcrkit.annotate_mhc(full, per_residue=True).reset_index(drop=True)
+    assert list(res['imgt'][:34]) == [str(-n) for n in range(33, 0, -1)] + ['1']
+    assert res['topology'][:33].value_counts().to_dict() == {'signal_peptide': 29,
+                                                             'extracellular': 4}
+    mature = tcrkit.mhc_sequence('DRB1*04:01', squeeze=True)['sequence']
+    res = tcrkit.annotate_mhc(mature, per_residue=True)
+    assert _negatives(res) == ['-4', '-3', '-2', '-1'] and res['aa'].iloc[:4].tolist() == \
+        list('GDTR')
+
+
+def test_the_leader_numbering_leaves_helices_and_domains_alone():
+    """Only residues before the first domain residue gain a number; the rest, the
+    helix flags included, are what the mature chain gets."""
+    for allele in ('DRA*01:01', 'DQA1*05:01', 'DRB1*04:01', 'A*02:01'):
+        full = tcrkit.mhc_sequence(allele, region='full', squeeze=True)['sequence']
+        mature = tcrkit.mhc_sequence(allele, squeeze=True)['sequence']
+        f = tcrkit.annotate_mhc(full, per_residue=True).reset_index(drop=True)
+        m = tcrkit.annotate_mhc(mature, per_residue=True).reset_index(drop=True)
+        first = int((f['domain'] != '-').to_numpy().argmax())
+        assert f['imgt'][:first].str.fullmatch(r'-\d+').all()
+        assert (f['domain'][:first] == '-').all() and not f['helix'][:first].any()
+        off = full.index(mature)
+        cols = ['aa', 'domain', 'imgt', 'region', 'helix']
+        assert f[cols].iloc[off:off + len(m)].reset_index(drop=True).equals(m[cols])
+
+
+def test_b2m_is_numbered_on_imgt_c_like():
+    res = tcrkit.annotate_mhc(B2M, per_residue=True, domains=True).reset_index(drop=True)
+    cys = res[res['aa'] == 'C']
+    assert cys['imgt'].tolist() == ['1023', '1104']    # the C-LIKE disulfide
+    assert cys['region'].tolist() == ['B', 'F'] and set(cys['domain']) == {'C-LIKE'}
+    assert res['imgt'].iloc[:3].tolist() == ['-2', '-1', '1001']   # IQ before R1
+    assert '1045.1' in set(res['imgt']) and '1085.1' in set(res['imgt'])
+    assert res.attrs['templates'][0] == 'Homsap B2M 1a1m_B'
+    wide = tcrkit.annotate_mhc(B2M, domains=True)
+    assert wide[['domains', 'domain_spans']].iloc[0].tolist() == ['C-LIKE', '3-95']
+    assert pd.isna(wide['helix'][0]) and pd.isna(wide['error'][0])
+    mouse = tcrkit.mhc_sequence('B2M_mouse', squeeze=True)['sequence']
+    num = tcrkit.annotate_mhc(mouse, per_residue=True, domains=True)
+    assert num.loc[num['aa'] == 'C', 'imgt'].tolist() == ['1023', '1104']
+
+
+def test_domains_numbers_alpha3_and_class_ii_alpha2_beta2():
+    for allele, groove in [('A*02:01', ['G-ALPHA1', 'G-ALPHA2']), ('DRA*01:01', ['G-ALPHA']),
+                           ('DRB1*01:01', ['G-BETA'])]:
+        seq = tcrkit.mhc_sequence(allele, region='full', squeeze=True)['sequence']
+        plain = tcrkit.annotate_mhc(seq, per_residue=True).reset_index(drop=True)
+        res = tcrkit.annotate_mhc(seq, per_residue=True, domains=True).reset_index(drop=True)
+        assert list(dict.fromkeys(res['domain'].replace('-', None).dropna())) == groove + ['C-LIKE']
+        c = res[res['domain'] == 'C-LIKE']
+        assert c.loc[c['aa'] == 'C', 'imgt'].tolist() == ['1023', '1104']
+        assert c['imgt'].str.fullmatch(r'1\d{3}(\.\d+)?').all()
+        # the groove, helices and leader are what they are without domains=True
+        other = res['domain'] != 'C-LIKE'
+        assert res[other].equals(plain[other])
+        assert (plain.loc[~other, 'imgt'] == '-').all()
+        wide = tcrkit.annotate_mhc(seq, domains=True)
+        assert wide['domains'][0] == ', '.join(groove + ['C-LIKE'])
+        assert wide['helix'][0] == tcrkit.annotate_mhc(seq)['helix'][0]
+    seg = tcrkit.annotate_mhc(HLA_A2, collapse='domain', domains=True)
+    assert seg['domain'].tolist() == ['G-ALPHA1', 'G-ALPHA2']   # the chain stops at alpha2
+    assert main(['annotate-mhc', '--seq', HLA_A2, '--domains']) == 0
+
+
+def test_cdomain_regions_and_templates():
+    from tcrkit import cdomain
+    assert [cdomain.cdomain_region(x) for x in ['1.2', '15', '15.1', '45.3', '77', '84.2',
+                                                '85.2', '96.1', '111.1', '128', '50']] == \
+        ['A', 'A', 'AB', 'CD', 'D', 'DE', 'DE', 'EF', 'FG', 'G', '']
+    t = cdomain.imgt_cdomain_templates()
+    assert {'B2M', 'TRAC', 'TRBC2', 'HLA-A'} <= set(t['gene'])
+    assert all(len(s) == len(labs) for s, labs in zip(t['sequence'], t['imgt']))
+    slots = cdomain._slots()
+    assert slots.index('1.1') < slots.index('1') < slots.index('15') < slots.index('15.1')
+    assert slots.index('85.1') < slots.index('85') and '46' not in slots
+    with pytest.raises(ValueError, match='no IMGT C-domain template'):
+        cdomain.number_cdomain(B2M, genes=['nope'])

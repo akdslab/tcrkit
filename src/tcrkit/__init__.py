@@ -12,7 +12,7 @@ The capabilities, all re-exported here:
 
 They live in these modules: ``stitch``, ``anarci``, ``normalize`` (allele *names*),
 ``pmhc`` (an allele to its *sequence*), ``mhc`` (an MHC sequence to its gene, IMGT
-numbering and helices, on top of ``gdomain``) and ``cdr3_junction``.
+numbering and helices, on top of ``gdomain`` and ``cdomain``) and ``cdr3_junction``.
 
 :mod:`tcrkit.tcr_pmhc` assembles whole complexes from the lot;
 :mod:`tcrkit.metrics` adds repertoire-level measures on top - :func:`diversity`
@@ -56,7 +56,7 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.5'
+__version__ = '0.1.6'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc
