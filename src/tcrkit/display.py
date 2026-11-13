@@ -171,10 +171,33 @@ def print_residues(residues: pd.DataFrame, columns=None, width: int | None = 60,
             print(file=out)
     legend = []
     for c in columns:
-        meaning = _MEANING.get(c, {})
-        items = [f'{_paint(ch, ch, palette) if c == by else ch} {meaning.get(ch, "")}'.rstrip()
-                 for ch in sorted(used[c])]
-        if items:
-            legend.append(f"{c}: {', '.join(items)}")
+        for line in _legend(c, used[c], palette if c == by else {}, pad):
+            legend.append(line)
     if legend:
         print('\n'.join(legend), file=out)
+
+
+def _legend(column: str, chars, palette: dict, pad: int, width: int = 80) -> list[str]:
+    """The legend of one line, wrapped at `width`: ``region  A B C D strands, H helix``."""
+    meaning = _MEANING.get(column, {})
+    order = list(meaning)
+    chars = sorted(chars, key=lambda ch: (order.index(ch) if ch in order else len(order), ch))
+    strands = [ch for ch in chars if meaning.get(ch, '').startswith('strand ')]
+    items = []                                       # (plain text, painted text)
+    if strands:
+        items.append((' '.join(strands) + (' strands' if len(strands) > 1 else ' strand'),
+                      ' '.join(_paint(s, s, palette) for s in strands)
+                      + (' strands' if len(strands) > 1 else ' strand')))
+    for ch in chars:
+        if ch not in strands:
+            text = f' {meaning[ch]}' if meaning.get(ch) else ''
+            items.append((ch + text, _paint(ch, ch, palette) + text))
+    lines, plain, painted = [], '', ''
+    for p, q in items:
+        if plain and pad + len(plain) + 2 + len(p) > width:
+            lines.append(painted + ',')
+            plain = painted = ''
+        plain, painted = (f'{plain}, {p}', f'{painted}, {q}') if plain else (p, q)
+    if plain:
+        lines.append(painted)
+    return [f"{column if i == 0 else '':<{pad}}{line}" for i, line in enumerate(lines)]

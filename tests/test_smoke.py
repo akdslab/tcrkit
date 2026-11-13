@@ -1093,3 +1093,12 @@ def test_show_prints_and_returns_nothing(capsys):
     assert 'topology' in capsys.readouterr().out
     tcrkit.anarci(FULL_BETA, allow={'A', 'B'})
     assert capsys.readouterr().out == ''                         # off by default
+
+
+def test_print_residues_legend_wraps_and_groups_strands(capsys):
+    tcrkit.anarci(FULL_BETA, allow={'A', 'B'}, domains=True, show=True)
+    plain = re.sub(r'\033\[\d*m', '', capsys.readouterr().out)
+    legend = plain.split('\n\n')[-1].splitlines()
+    assert all(len(line) <= 80 for line in legend)
+    assert 'A B C D E F G strands' in plain and 'strand A' not in plain
+    assert legend[0].startswith('gene_segment  L leader')        # biological order

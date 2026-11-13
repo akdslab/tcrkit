@@ -6,18 +6,17 @@ Python library or from the command line.
 
 ## What is it for?
 
-Every dataset writes TCRs and MHCs its own way: `TCRBV20S1` or `TRBV20-1`, a CDR3 with or
-without its C/F, `HLA-A*02:01` or `A*0201`, and usually no sequence at all. tcrkit gets
-them all into one form:
-
-* **Build sequences from gene calls.** V + J + CDR3 → the full-length chain, and an
-  allele name → the MHC protein, ready for structure prediction or language models.
-* **Clean up a TCR–pMHC table.** One call normalizes the names, repairs the CDR3s,
-  stitches both chains and fetches the MHC, and checks its own work
-  ([`build_tcr_pmhc`](#the-whole-complex-in-one-call)).
-* **Find the same region in any sequence.** CDR1–3 of a TCR and the groove helices of an
-  MHC by IMGT position, so a residue number means the same place in every chain.
-* **Compare repertoires.** Diversity, overlap, generation probability and tcrdist.
+* **Build full-length TCR–pMHC sequences** from V/J gene calls, CDR3s and MHC allele
+  names ([`build_tcr_pmhc`](#the-whole-complex-in-one-call) does it all in one call).
+* **Normalize names.** TCR gene calls (`TCRBV20S1` → `TRBV20-1`) and MHC alleles
+  (`A*0201` → `A0201`).
+* **Repair CDR3s.** Put back the conserved C / F junction residues a CDR3 was reported
+  without.
+* **Identify a sequence.** For a TCR chain: its chain type and V / J genes. For an MHC
+  chain: its gene and closest allele.
+* **Annotate a sequence.** IMGT numbering, CDR1–3, framework and constant domain of a
+  TCR; domains, strands and groove helices of an MHC. Print it coloured with `show=True`.
+* **Repertoire metrics.** Diversity, overlap, generation probability and tcrdist.
 
 ## What it covers
 
@@ -95,9 +94,10 @@ tcrkit.anarci(beta['sequence_aa'], allow={'A', 'B'})
 # the whole chain in pieces: leader, V, N/D, J, constant domain, tail
 tcrkit.anarci(beta['sequence_aa'], allow={'A', 'B'}, collapse='gene_segment', domains=True)
 
-# print the sequence with its V / J / C and CDR lines under it
-tcrkit.anarci(beta['sequence_aa'], allow={'A', 'B'}, domains=True, show=True)
+tcrkit.anarci(beta['sequence_aa'], allow={'A', 'B'}, domains=True, show=True)   # print it
 ```
+
+![anarci show=True: the TCR chain with its gene segments, strands and CDRs](docs/images/show_tcr.svg)
 
 **Get an MHC sequence and annotate it**
 
@@ -108,8 +108,10 @@ tcrkit.annotate_mhc(a2)[['gene', 'allele', 'allele_identity', 'domains', 'helix'
 # 0    A  A0201              1.0  G-ALPHA1, G-ALPHA2  50-86, 140-176
 
 tcrkit.annotate_mhc(a2, collapse=True)     # strands A-D, turns and helix, with IMGT ranges
-tcrkit.print_residues(tcrkit.annotate_mhc(a2, per_residue=True), color=True)
+tcrkit.annotate_mhc(a2, domains=True, show=True)                    # print it, with α3
 ```
+
+![annotate_mhc show=True: HLA-A*02:01 with its domains, strands and groove helices](docs/images/show_mhc.svg)
 
 ![annotate_mhc: gene, allele, groove domains and helices](docs/images/annotate_mhc.png)
 
@@ -169,14 +171,14 @@ The code is MIT, but the bundled data is other people's work:
 
 | data | used by | cite |
 |---|---|---|
-| MHC protein sequences | `mhc_sequence`, `annotate_mhc`, `build_tcr_pmhc` | **[UniProt](https://www.uniprot.org)** (UniProtKB and UniParc, [CC BY 4.0](https://www.uniprot.org/help/license)) — The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025. *Nucleic Acids Research* 53, D609–D617 (2025) |
-| HLA sequences, opt-in, not shipped | `mhc_sequence(source='decodertcr')` | **[DecoderTCR](https://github.com/Biohub/DecoderTCR)** (MIT), fetched at commit `3e3d9889` on first use — Lai B et al. DecoderTCR: Compositional Pretraining and Entropy-Guided Decoding for TCR-pMHC Interactions. *ICML* (2026). |
-| membrane topology of those sequences | `mhc_sequence(region=...)`, `annotate_mhc` | **DeepTMHMM** — Hallgren, J. et al. DeepTMHMM predicts alpha and beta transmembrane proteins using deep neural networks. *bioRxiv* (2022). [doi:10.1101/2022.04.08.487609](https://doi.org/10.1101/2022.04.08.487609) |
-| IMGT C-domain numbering (TCR constant domain, MHC α3 / β2, B2M) | `anarci(domains=True)`, `annotate_mhc(domains=True)` | **IMGT** (CC BY 4.0) — Lefranc, M.-P. et al. IMGT unique numbering for immunoglobulin and T cell receptor constant domains and Ig superfamily C-like domains. *Dev. Comp. Immunol.* 29, 185–203 (2005) |
-| IMGT G-domain numbering, and the groove helices | `annotate_mhc`, `imgt_regions` | **IMGT** (CC BY 4.0) — Lefranc, M.-P. et al. IMGT unique numbering for the G-DOMAIN and G-LIKE-DOMAIN. *Dev. Comp. Immunol.* 29, 917–938 (2005). Helix ranges from the [MHC Motif Atlas](http://mhcmotifatlas.org) |
-| CDR3 junction residues per V/J gene | `add_cdr3_junctions` | **OTS** (CC BY 4.0; per-gene aggregates only) — Raybould, M.I.J. et al. The Observed T Cell Receptor Space database. *Cell Reports* 43(9):114704 (2024). [doi:10.1016/j.celrep.2024.114704](https://doi.org/10.1016/j.celrep.2024.114704) |
+| MHC protein sequences | `mhc_sequence`, `annotate_mhc` | [UniProt](https://www.uniprot.org), *NAR* 2025 (CC BY 4.0) |
+| HLA sequences (opt-in, not shipped) | `mhc_sequence(source='decodertcr')` | [DecoderTCR](https://github.com/Biohub/DecoderTCR), Lai et al., *ICML* 2026 (MIT) |
+| membrane topology | `mhc_sequence(region=...)`, `annotate_mhc` | DeepTMHMM, Hallgren et al., [*bioRxiv* 2022](https://doi.org/10.1101/2022.04.08.487609) |
+| IMGT G-domain numbering, groove helices | `annotate_mhc`, `imgt_regions` | IMGT, Lefranc et al., *Dev. Comp. Immunol.* 29:917 (2005) (CC BY 4.0); [MHC Motif Atlas](http://mhcmotifatlas.org) |
+| IMGT C-domain numbering | `anarci(domains=True)`, `annotate_mhc(domains=True)` | IMGT, Lefranc et al., *Dev. Comp. Immunol.* 29:185 (2005) (CC BY 4.0) |
+| CDR3 junction residues | `add_cdr3_junctions` | OTS, Raybould et al., [*Cell Reports* 2024](https://doi.org/10.1016/j.celrep.2024.114704) (CC BY 4.0) |
 
-Per-file provenance is in [the data README](src/tcrkit/data/README.md).
+Full references and per-file provenance are in [the data README](src/tcrkit/data/README.md).
 
 ## License
 

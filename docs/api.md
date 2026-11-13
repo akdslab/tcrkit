@@ -537,7 +537,8 @@ line. `columns=` picks the lines (default: whichever of `topology`, `domain`, `g
 TCR it says the same); `SYMBOLS` says which character stands for what. `color=True` colours the
 residues and the `region` line by region (strands blue, turns grey, helix red, CDRs
 yellow / green / magenta); `color='topology'` colours by another line. Terminals and
-Jupyter show the colours.
+Jupyter show the colours. The legend at the end lists each line's symbols in sequence
+order, strands grouped (`A B C D E F G strands`), wrapped at 80 characters.
 
 The `region` line's `H` (IMGT 50–92) is wider than the `helix` line, which is
 the reference for the helices; the note under `annotate_mhc` says why.

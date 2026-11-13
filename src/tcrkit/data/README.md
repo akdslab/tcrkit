@@ -63,3 +63,22 @@ between strand D and the helix `'49.1'`..`'49.7'`.
 
 Cite: Lefranc M.-P. et al., IMGT unique numbering for the G-DOMAIN and G-LIKE-DOMAIN,
 *Dev. Comp. Immunol.* 29, 917-938 (2005); IMGT®, https://www.imgt.org.
+
+## imgt_cdomains.csv
+
+Parsed from IMGT's C-DOMAIN / C-LIKE-DOMAIN protein display
+(https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/C-DOMAIN/CLdomains.html), human
+and mouse rows. Positions 1-128 with 46-76 absent; tcrkit adds 1000 when a chain also
+has a V or G domain.
+
+Cite: Lefranc M.-P. et al., IMGT unique numbering for immunoglobulin and T cell receptor
+constant domains and Ig superfamily C-like domains, *Dev. Comp. Immunol.* 29, 185-203
+(2005); IMGT®, https://www.imgt.org.
+
+## cdr3_junction_lookup.csv
+
+Per-V/J-gene CDR3 junction residues aggregated from OTS (CC BY 4.0; aggregates only, no
+individual sequences).
+
+Cite: Raybould M.I.J. et al., The Observed T Cell Receptor Space database, *Cell Reports*
+43(9), 114704 (2024), https://doi.org/10.1016/j.celrep.2024.114704.

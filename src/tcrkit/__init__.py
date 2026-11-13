@@ -56,7 +56,7 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.6'
+__version__ = '0.1.7'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc

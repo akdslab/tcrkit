@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 - 2026-11-12
+
+- `print_residues` / `show=` legend: strands grouped, items in sequence order, wrapped at
+  80 characters instead of one long line per annotation.
+- README: coloured `show=True` images of a TCR and an MHC; shorter citation table (full
+  references in the data README).
+
 ## 0.1.6 - 2026-11-12
 
 - **Class II leaders numbered**: everything before the first IMGT position counts back

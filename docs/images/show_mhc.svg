@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="788" height="636" viewBox="0 0 788 636">
+<rect width="100%" height="100%" rx="6" fill="#ffffff" stroke="#d0d7de"/>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" xml:space="preserve">
+<text x="16" y="34"><tspan fill="#24292e">0  283 residues</tspan></text>
+<text x="16" y="52"><tspan fill="#24292e">          1         11        21        31        41        51        61        71</tspan></text>
+<text x="16" y="70"><tspan fill="#24292e">sequence  </tspan><tspan fill="#0366d6" font-weight="bold">GSHSMRYFFTSVSR</tspan><tspan fill="#8a8f98" font-weight="bold">PGR</tspan><tspan fill="#0366d6" font-weight="bold">GEPRFIAVGYV</tspan><tspan fill="#8a8f98" font-weight="bold">DD</tspan><tspan fill="#0366d6" font-weight="bold">TQFVRFDS</tspan><tspan fill="#8a8f98" font-weight="bold">DAA</tspan><tspan fill="#0366d6" font-weight="bold">SQRMEPRA</tspan><tspan fill="#d73a49" font-weight="bold">PWIEQEGPEYWDGETRKVKAHSQTHRVDLGT</tspan></text>
+<text x="16" y="88"><tspan fill="#24292e">topology  OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO</tspan></text>
+<text x="16" y="106"><tspan fill="#24292e">domain    11111111111111111111111111111111111111111111111111111111111111111111111111111111</tspan></text>
+<text x="16" y="124"><tspan fill="#24292e">region    </tspan><tspan fill="#0366d6" font-weight="bold">AAAAAAAAAAAAAA</tspan><tspan fill="#8a8f98" font-weight="bold">...</tspan><tspan fill="#0366d6" font-weight="bold">BBBBBBBBBBB</tspan><tspan fill="#8a8f98" font-weight="bold">..</tspan><tspan fill="#0366d6" font-weight="bold">CCCCCCCC</tspan><tspan fill="#8a8f98" font-weight="bold">...</tspan><tspan fill="#0366d6" font-weight="bold">DDDDDDDD</tspan><tspan fill="#d73a49" font-weight="bold">HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH</tspan></text>
+<text x="16" y="142"><tspan fill="#24292e">helix                                                      HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH</tspan></text>
+<text x="16" y="160"></text>
+<text x="16" y="178"><tspan fill="#24292e">          81        91        101       111       121       131       141       151</tspan></text>
+<text x="16" y="196"><tspan fill="#24292e">sequence  </tspan><tspan fill="#d73a49" font-weight="bold">LRGYYNQSEA</tspan><tspan fill="#0366d6" font-weight="bold">GSHTVQRMYGCDVG</tspan><tspan fill="#8a8f98" font-weight="bold">SDW</tspan><tspan fill="#0366d6" font-weight="bold">RFLRGYHQYAY</tspan><tspan fill="#8a8f98" font-weight="bold">DG</tspan><tspan fill="#0366d6" font-weight="bold">KDYIALKE</tspan><tspan fill="#8a8f98" font-weight="bold">D</tspan><tspan fill="#0366d6" font-weight="bold">LRSWTAAD</tspan><tspan fill="#d73a49" font-weight="bold">MAAQTTKHKWEAAHVAEQLRAYL</tspan></text>
+<text x="16" y="214"><tspan fill="#24292e">topology  OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO</tspan></text>
+<text x="16" y="232"><tspan fill="#24292e">domain    11111111112222222222222222222222222222222222222222222222222222222222222222222222</tspan></text>
+<text x="16" y="250"><tspan fill="#24292e">region    </tspan><tspan fill="#d73a49" font-weight="bold">HHHHHHHHHH</tspan><tspan fill="#0366d6" font-weight="bold">AAAAAAAAAAAAAA</tspan><tspan fill="#8a8f98" font-weight="bold">...</tspan><tspan fill="#0366d6" font-weight="bold">BBBBBBBBBBB</tspan><tspan fill="#8a8f98" font-weight="bold">..</tspan><tspan fill="#0366d6" font-weight="bold">CCCCCCCC</tspan><tspan fill="#8a8f98" font-weight="bold">.</tspan><tspan fill="#0366d6" font-weight="bold">DDDDDDDD</tspan><tspan fill="#d73a49" font-weight="bold">HHHHHHHHHHHHHHHHHHHHHHH</tspan></text>
+<text x="16" y="268"><tspan fill="#24292e">helix     HHHHHH                                                     HHHHHHHHHHHHHHHHHHHHH</tspan></text>
+<text x="16" y="286"></text>
+<text x="16" y="304"><tspan fill="#24292e">          161       171       181       191       201       211       221       231</tspan></text>
+<text x="16" y="322"><tspan fill="#24292e">sequence  </tspan><tspan fill="#d73a49" font-weight="bold">EGTCVEWLRRYLENGKETLQRT</tspan><tspan fill="#0366d6" font-weight="bold">DAPKTHMTHHAVSDHEATLRCWAL</tspan><tspan fill="#8a8f98" font-weight="bold">SFYPAEIT</tspan><tspan fill="#0366d6" font-weight="bold">LTWQRDG</tspan><tspan fill="#8a8f98" font-weight="bold">EDQTQ</tspan><tspan fill="#0366d6" font-weight="bold">DTELVETR</tspan><tspan fill="#8a8f98" font-weight="bold">PAGDGT</tspan></text>
+<text x="16" y="340"><tspan fill="#24292e">topology  OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO</tspan></text>
+<text x="16" y="358"><tspan fill="#24292e">domain    2222222222222222222222cccccccccccccccccccccccccccccccccccccccccccccccccccccccccc</tspan></text>
+<text x="16" y="376"><tspan fill="#24292e">region    </tspan><tspan fill="#d73a49" font-weight="bold">HHHHHHHHHHHHHHHHHHHHHH</tspan><tspan fill="#0366d6" font-weight="bold">AAAAAAAAAAAAAABBBBBBBBBB</tspan><tspan fill="#8a8f98" font-weight="bold">........</tspan><tspan fill="#0366d6" font-weight="bold">CCCCCCC</tspan><tspan fill="#8a8f98" font-weight="bold">.....</tspan><tspan fill="#0366d6" font-weight="bold">DDDDDDDD</tspan><tspan fill="#8a8f98" font-weight="bold">::::::</tspan></text>
+<text x="16" y="394"><tspan fill="#24292e">helix     HHHHHHHHHHHHHHHH</tspan></text>
+<text x="16" y="412"></text>
+<text x="16" y="430"><tspan fill="#24292e">          241       251       261       271       281</tspan></text>
+<text x="16" y="448"><tspan fill="#24292e">sequence  </tspan><tspan fill="#8a8f98" font-weight="bold">FQ</tspan><tspan fill="#0366d6" font-weight="bold">KWAAVVVPSGQEQRYTC</tspan><tspan fill="#8a8f98" font-weight="bold">HVQHEGLPKPL</tspan><tspan fill="#0366d6" font-weight="bold">TLRW</tspan><tspan fill="#24292e">EPSSQPTIP</tspan></text>
+<text x="16" y="466"><tspan fill="#24292e">topology  OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO</tspan></text>
+<text x="16" y="484"><tspan fill="#24292e">domain    cccccccccccccccccccccccccccccccccc</tspan></text>
+<text x="16" y="502"><tspan fill="#24292e">region    </tspan><tspan fill="#8a8f98" font-weight="bold">::</tspan><tspan fill="#0366d6" font-weight="bold">EEEEEEEEEFFFFFFFF</tspan><tspan fill="#8a8f98" font-weight="bold">:::::::::::</tspan><tspan fill="#0366d6" font-weight="bold">GGGG</tspan></text>
+<text x="16" y="520"><tspan fill="#24292e">helix</tspan></text>
+<text x="16" y="538"></text>
+<text x="16" y="556"><tspan fill="#24292e">topology  O extracellular</tspan></text>
+<text x="16" y="574"><tspan fill="#24292e">domain    1 G-ALPHA1, 2 G-ALPHA2, c C-LIKE</tspan></text>
+<text x="16" y="592"><tspan fill="#24292e">region    </tspan><tspan fill="#0366d6" font-weight="bold">A</tspan><tspan fill="#24292e"> </tspan><tspan fill="#0366d6" font-weight="bold">B</tspan><tspan fill="#24292e"> </tspan><tspan fill="#0366d6" font-weight="bold">C</tspan><tspan fill="#24292e"> </tspan><tspan fill="#0366d6" font-weight="bold">D</tspan><tspan fill="#24292e"> </tspan><tspan fill="#0366d6" font-weight="bold">E</tspan><tspan fill="#24292e"> </tspan><tspan fill="#0366d6" font-weight="bold">F</tspan><tspan fill="#24292e"> </tspan><tspan fill="#0366d6" font-weight="bold">G</tspan><tspan fill="#24292e"> strands, </tspan><tspan fill="#8a8f98" font-weight="bold">.</tspan><tspan fill="#24292e"> turn (AB, BC, CD), </tspan><tspan fill="#8a8f98" font-weight="bold">:</tspan><tspan fill="#24292e"> turn (DE, EF, FG),</tspan></text>
+<text x="16" y="610"><tspan fill="#24292e">          </tspan><tspan fill="#d73a49" font-weight="bold">H</tspan><tspan fill="#24292e"> helix region (IMGT 50-92)</tspan></text>
+<text x="16" y="628"><tspan fill="#24292e">helix     H groove-helix residue</tspan></text>
+</g></svg>
