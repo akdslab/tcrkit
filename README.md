@@ -158,7 +158,9 @@ tcrkit --help
 
 ## Learn more
 
-* [docs/api.md](docs/api.md): every function and option.
+* [docs/api.md](docs/api.md): every function and option. It comes with the package too:
+  `tcrkit docs api` prints it, and `tcrkit skills install` copies the Claude Code skills
+  (TCR, MHC, metrics) into `~/.claude/skills`.
 * [notebooks/tcrkit_showcase.ipynb](notebooks/tcrkit_showcase.ipynb): a runnable tour.
   [notebooks/tcrkit_metrics.ipynb](notebooks/tcrkit_metrics.ipynb) covers the metrics.
 * MHC sequences can also come from DecoderTCR's HLA reference:

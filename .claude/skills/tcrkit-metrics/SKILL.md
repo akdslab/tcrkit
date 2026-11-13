@@ -21,3 +21,4 @@ tcrkit.tcrdist(df, chains=('alpha', 'beta'))                         # beta_cdr3
 - OLGA wants the CDR3 *with* C/F (`add_cdr3_junctions` output).
 - tcrdist3 silently drops rows with unknown genes - check the shape.
 - CLI: `tcrkit diversity | morisita-horn | generation-probability --help`.
+- Full reference: `tcrkit docs api` (section 7, Repertoire metrics).

@@ -44,6 +44,14 @@ path = "src/tcrkit/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/tcrkit"]
 
+# the docs and the user skills go in the wheel too (tcrkit docs, tcrkit skills install);
+# the development skills (add-capability, rebuild-mhc-data, release) stay in the repository
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "tcrkit/docs"
+".claude/skills/tcrkit-tcr" = "tcrkit/skills/tcrkit-tcr"
+".claude/skills/tcrkit-mhc" = "tcrkit/skills/tcrkit-mhc"
+".claude/skills/tcrkit-metrics" = "tcrkit/skills/tcrkit-metrics"
+
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",

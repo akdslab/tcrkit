@@ -34,4 +34,4 @@ tcrkit.build_tcr_pmhc(df)                                 # all steps, self-chec
   residue off. Genes next to per-residue rows: `res.join(anarci(seq)[['v_gene']])`.
 - `normalize_tcr`: a valid but wrong `species` silently changes the gene; leave it unset.
 - `build_tcr_pmhc` expects `alpha_v/alpha_j/alpha_cdr3`, `beta_*`, `mhc_a` (`mhc_b`).
-- Full reference: `docs/api.md`.
+- Full reference: `tcrkit docs api` (prints `docs/api.md`).

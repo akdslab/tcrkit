@@ -9,6 +9,8 @@
     tcrkit diversity      entropy, clonality and richness of a repertoire
     tcrkit morisita-horn  overlap between repertoires
     tcrkit generation-probability   OLGA pgen of a CDR3
+    tcrkit docs           the documentation pages (tcrkit docs api prints one)
+    tcrkit skills install copy the Claude Code skills into ~/.claude/skills
 
 These are separate steps that compose: a CDR3 reported as IMGT 105-117 will not stitch,
 so repair it with ``add-cdr3-junctions`` first and feed the result to ``stitch``.
@@ -611,6 +613,58 @@ def _add_generation_probability(sub):
 
 
 # ---------------------------------------------------------------------------
+# docs / skills: the documentation and Claude Code skills in the package
+# ---------------------------------------------------------------------------
+
+def _cmd_docs(args):
+    from .resources import docs
+    try:
+        page = None if args.name is None else docs(args.name)
+    except FileNotFoundError as e:
+        raise SystemExit(str(e))
+    if page is None:
+        for name, path in docs().items():
+            print(f'{name:<8}{path}')
+    elif args.path:
+        print(page)
+    else:
+        print(page.read_text())
+
+
+def _cmd_skills(args):
+    from .resources import install_skills, skills
+    if args.action == 'list':
+        for name, path in skills().items():
+            print(f'{name:<16}{path}')
+        return
+    for name, status in install_skills(args.target, project=args.project,
+                                       force=args.force).items():
+        print(f'{name:<16}{status}')
+
+
+def _add_docs(sub):
+    p = sub.add_parser('docs', help='the documentation pages',
+                       description='Without a name, lists the pages and their files; with '
+                                   'one, prints it.')
+    p.add_argument('name', nargs='?', help='a page, e.g. api')
+    p.add_argument('--path', action='store_true', help="print the page's file, not its text")
+    p.set_defaults(func=_cmd_docs)
+    return p
+
+
+def _add_skills(sub):
+    p = sub.add_parser('skills', help='the Claude Code skills for tcrkit',
+                       description='install copies them into ~/.claude/skills (every '
+                                   'project) or, with --project, ./.claude/skills.')
+    p.add_argument('action', choices=['install', 'list'])
+    p.add_argument('--project', action='store_true', help='into ./.claude/skills')
+    p.add_argument('--target', help='another skills folder to copy into')
+    p.add_argument('--force', action='store_true', help='replace skills that differ')
+    p.set_defaults(func=_cmd_skills)
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -637,6 +691,8 @@ def build_parser():
         p.add_argument('--sep', help='input separator (inferred from the extension)')
         p.add_argument('-q', '--quiet', action='store_true',
                        help='suppress progress bars and summaries')
+    _add_docs(sub)
+    _add_skills(sub)
     return parser
 
 

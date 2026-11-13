@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8 - 2026-11-13
+
+- The docs and the three user skills come with the wheel: `tcrkit.docs()` / `tcrkit docs
+  [page]`, `tcrkit.install_skills()` / `tcrkit skills install`. Nothing else changes.
+
 ## 0.1.7 - 2026-11-12
 
 - `print_residues` / `show=` legend: strands grouped, items in sequence order, wrapped at

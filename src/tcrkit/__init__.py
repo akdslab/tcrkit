@@ -56,7 +56,7 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.7'
+__version__ = '0.1.8'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc
@@ -73,6 +73,7 @@ from .display import print_residues
 from .imgt import imgt_regions
 from .tcr_pmhc import build_tcr_pmhc
 from .stitch import DEFAULT_CONSTANT, stitch, stitch_pair
+from .resources import docs, install_skills
 
 __all__ = [
     '__version__',
@@ -97,4 +98,6 @@ __all__ = [
     'build_tcr_pmhc',
     # repertoire metrics (the last two need the 'metrics' extra)
     'diversity', 'morisita_horn', 'generation_probability', 'tcrdist',
+    # the docs and Claude Code skills that come with the package
+    'docs', 'install_skills',
 ]

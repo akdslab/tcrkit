@@ -34,4 +34,4 @@ tcrkit.imgt_regions()          # IMGT ranges of CDRs + helices, with sources (al
   `topology` says which are signal peptide. α3 / α2 / β2 and B2M stay `'-'`
   unless `domains=True`: then IMGT C-LIKE + 1000 (`domain == 'C-LIKE'`, Cys
   `1023`/`1104`). The membrane anchor and tail always stay `'-'`.
-- Full reference: `docs/api.md`.
+- Full reference: `tcrkit docs api` (prints `docs/api.md`).

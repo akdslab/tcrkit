@@ -657,6 +657,7 @@ Nine subcommands mirror the Python API:
 tcrkit stitch | anarci | normalize-tcr | normalize-mhc | add-cdr3-junctions
        annotate-mhc
        diversity | morisita-horn | generation-probability
+       docs | skills
 ```
 
 `mhc_sequence`, `tcrdist` and `build_tcr_pmhc` are Python-only. For the metrics,
@@ -669,3 +670,13 @@ Each takes values as flags (`tcrkit stitch --v TRBV19 --j TRBJ2-7 --cdr3 CASSIRS
 --chain beta`) *or* a table: `--in-csv` plus the relevant `--*-col` flags, writing with
 `--out-csv`, `--json`, or a readable table on stdout. `tcrkit <command> --help` lists each
 command's options.
+
+### Docs and Claude Code skills: `docs(name=None)` · `install_skills(target=None, project=False, force=False)`
+
+This page and the user skills (`tcrkit-tcr`, `tcrkit-mhc`, `tcrkit-metrics`) come with the
+installed package, so they match its version. `docs()` gives `{name: path}` of the pages,
+`docs('api')` the path of one. `install_skills()` copies the skills into
+`~/.claude/skills` (`project=True`: `./.claude/skills`, or any `target`); a skill already
+there that differs is kept unless `force=True`. It returns `{skill: status}`. CLI:
+`tcrkit docs [name] [--path]`, `tcrkit skills install [--project] [--target DIR] [--force]`,
+`tcrkit skills list`.
