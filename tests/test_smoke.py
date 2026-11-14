@@ -329,6 +329,19 @@ def test_anarci_imgt_index_maps_positions_to_residues():
         out['CDR3_aa'].iloc[0]
 
 
+def test_anarci_imgt_index_column_is_there_when_nothing_numbers():
+    """The column must not depend on whether any sequence happened to number.
+
+    A peptide-MHC structure has no V domain at all, so every sequence fails, and a
+    caller indexing ``imgt_dict`` would get a KeyError for exactly those inputs.
+    """
+    out = tcrkit.anarci({'peptide': 'TPYDINQML', 'junk': 'NOTASEQUENCE'},
+                        include_imgt_index=True, progress_bar=False)
+    assert 'imgt_dict' in out.columns
+    assert not any(isinstance(v, dict) for v in out['imgt_dict'])
+    assert (out['error'] != '-').all()
+
+
 def test_anarci_separate_index_aligns_chains_on_shared_positions():
     wide = tcrkit.anarci({'a': ALPHA_AA, 'b': BETA_AA, 'junk': 'NOTASEQUENCE'},
                          allow={'A', 'B'}, separate_index=True, progress_bar=False)

@@ -311,7 +311,8 @@ def _number(items, progress_bar=True, include_imgt_index=False, separate_index=F
     _ensure_backend(kwargs.get('hmmerpath', ''), use_pyhmmer=use_pyhmmer)
 
     if not items:
-        return pd.DataFrame(columns=list(ERROR_ROW))
+        cols = list(ERROR_ROW) + (['imgt_dict'] if include_imgt_index else [])
+        return pd.DataFrame(columns=cols)
     it = progress(items, desc='ANARCI', total=len(items),
                   enabled=progress_bar and len(items) > 5)
 
@@ -335,6 +336,12 @@ def _number(items, progress_bar=True, include_imgt_index=False, separate_index=F
         results.append(df_sample)
 
     df = pd.concat(results, ignore_index=False)
+    if include_imgt_index and 'imgt_dict' not in df.columns:
+        # Only `_prepare` adds the column, so when every sequence fails to number -
+        # a structure with no V domain at all, say a peptide-MHC complex - no row
+        # carries it and the frame silently comes back a column short. Keep the shape
+        # the same whether or not anything numbered.
+        df['imgt_dict'] = None
     if separate_index:
         df = separate_imgt_index(_expand_imgt_index(df))
     return df.fillna('-')
