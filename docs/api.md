@@ -110,7 +110,9 @@ IMGT-numbers protein sequences and reports their V/J genes and CDR loops.
 ![anarci: one row per sequence](images/anarci.png)
 
 Out: `CDR1/2/3_aa` with their 1-based `_start` / `_end`, `v_gene` / `j_gene` and their
-identities, `species`, `chain_type`, `query_start` / `query_end`, `error`.
+identities, `species` (of the HMM the domain matched best), `germline_species` (of the
+V germline gene: the one to trust for a TCR), `chain_type`, `query_start` / `query_end`,
+`error`.
 
 **`domains=True`: V, J and C on the whole chain.** ANARCI only numbers the V domain.
 With `domains=True` every residue also says which part of the chain it is:
@@ -317,7 +319,7 @@ Extra keywords go to `normalize_mhc` (e.g. `restrict_allele_fields=`).
 
 | `source=` | what | |
 |---|---|---|
-| `'uniprot'` (default) | the bundled reference: 186 alleles, each with its own UniProt entry, identical to the allele | shipped |
+| `'uniprot'` (default) | the bundled reference: 186 human and mouse alleles, each with its own UniProt entry, identical to the allele, and 76 chains of 20 other species | shipped |
 | `'decodertcr'` | [DecoderTCR](https://github.com/Biohub/DecoderTCR)'s HLA reference (MIT): 87 human chains from its 88 pairs | downloaded on first use, then cached in `~/.cache/tcrkit/` |
 
 ```python
@@ -346,21 +348,23 @@ exclusive.
 either source. The bundled one is two files, `mhc_uniprot.fasta` (the UniProt
 sequences, exactly as UniProt serves them) and `mhc_annotations.csv` (everything else),
 joined here; `bundled_mhc_table_path()` is the CSV, and passing it as `path=` gives the
-same joined table. Another `path=` reads a file of the same shape. One table of 186
-alleles serves both MHC capabilities: every row carries its full sequence and membrane
+same joined table. Another `path=` reads a file of the same shape. One table of 262
+chains (186 human and mouse alleles, 76 of other species) serves both MHC capabilities: every row carries its full sequence and membrane
 topology, `accession` the UniProt entry, `in_detect` marks the database MHC genes are
 matched on (`best_mhc`, behind `annotate_mhc`), and `helix_ind` the Motif Atlas gene
 representatives. `MHC_SOURCES` lists the sources.
 
-### `list_mhc(what='alleles', source='uniprot')`
+### `list_mhc(what='alleles', source='uniprot', species=None)`
 
 What a source has, for looking at: `'alleles'` (one row per allele), `'genes'` (one row
 per gene, with `n_alleles` and the `alleles`), or `'pairs'` — the heterodimers DecoderTCR
 stores, as `pair`, `mhc_a`, `mhc_b`, `mhc_class`. The bundled reference stores single
-chains, so pairs need `source='decodertcr'`.
+chains, so pairs need `source='decodertcr'`. `species=` keeps only some species, by
+common or scientific name (`'human'`, `['human', 'mouse']`, `'Sus scrofa'`).
 
 ```python
-tcrkit.list_mhc('genes')                          # bundled: 186 alleles over their genes
+tcrkit.list_mhc('genes')                          # bundled: 262 chains over their genes
+tcrkit.list_mhc(species=['human', 'mouse'])       # the 186 human and mouse alleles
 tcrkit.list_mhc('pairs', source='decodertcr')     # DecoderTCR's 88 pairs
 ```
 
@@ -489,16 +493,17 @@ from IMGT's [G-DOMAIN page](https://www.imgt.org/IMGTrepertoireMH/Proteins/prote
 `attrs['templates']` of the per-residue table names them. That table ships with tcrkit;
 `python -m tcrkit._build.fetch_imgt_gdomains` rebuilds it from IMGT.
 
-### The gene matching: `best_mhc` · `mhc_span` · `mhc_chain` · `mhc_database` (in `tcrkit.mhc`)
+### The gene matching: `best_mhc` · `mhc_span` · `mhc_chain` · `mhc_species` · `mhc_database` (in `tcrkit.mhc`)
 
 What `annotate_mhc` does first, for one sequence, as plain functions:
 
 ```python
-from tcrkit.mhc import best_mhc, mhc_chain, mhc_span
+from tcrkit.mhc import best_mhc, mhc_chain, mhc_span, mhc_species
 
 best_mhc(seq)                    # ('A', 'A0201', 0.53): gene, closest allele, score
 mhc_span('GGGGSGGGGS' + seq)     # (10, 192): where the MHC part lies, 0-based, end exclusive
 mhc_chain('DRB1')                # 'beta'
+mhc_species('A0201')             # 'human'; 'pig' for 'SLA-1*04', 'chicken' for 'BF2*04'
 ```
 
 - `best_mhc(sequence)`: the best-matching bundled gene and allele, and the local
@@ -509,7 +514,11 @@ mhc_chain('DRB1')                # 'beta'
 - `mhc_chain(gene)`: which chain of an MHC molecule a gene codes for: `'heavy'`
   (class I), `'alpha'` / `'beta'` (class II), `'B2M'`, or None for an unknown gene.
   `annotate_mhc` picks the G domains to number by it. Mouse genes are named as in the
-  bundled table: `AA` / `AB` for I-A alpha / beta, `EA` / `EB` for I-E.
+  bundled table: `AA` / `AB` for I-A alpha / beta, `EA` / `EB` for I-E. Other species'
+  genes carry their prefix: `Mamu-B`, `SLA-1`, `BoLA-N`, chicken `BF2` / `BLA` / `BLB2`.
+- `mhc_species(allele)`: the species of a bundled allele (`'human'`, `'mouse'`, `'pig'`,
+  ...), or None. The species of a chain is that of its closest allele:
+  `mhc_species(best_mhc(seq)[1])`.
 - `mhc_database()`: the sequences matched on (the mature chains of the `in_detect`
   rows): `allele`, `sequence`, `gene`, `class`.
 

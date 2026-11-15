@@ -15,14 +15,15 @@ tcrkit.annotate_mhc(seq, collapse=True)                       # strands A-D, tur
 tcrkit.annotate_mhc(seq, collapse='topology')                 # signal peptide .. tail
 tcrkit.annotate_mhc(seq, per_residue=True, domains=True)      # + alpha3/beta2/B2M, C-LIKE + 1000
 tcrkit.annotate_mhc(seq, show=True)                           # prints it (colour) (print_residues); returns None
-tcrkit.list_mhc('genes'); tcrkit.list_mhc('pairs', source='decodertcr')
+tcrkit.list_mhc('genes', species='human'); tcrkit.list_mhc('pairs', source='decodertcr')
 tcrkit.imgt_regions()          # IMGT ranges of CDRs + helices, with sources (all_regions=True)
 ```
 
 - `region=`: `extracellular` (default), `full`, `mature`, `signal_peptide`,
   `transmembrane`, `cytoplasmic`. Regions mean the same stretch of the chain for both
   sources (DecoderTCR chains get the bundled topology).
-- Sources: bundled = 186 alleles from UniProt, shipped; `decodertcr` = 87 human chains
+- Sources: bundled = 186 human / mouse alleles from UniProt, plus 76 chains of TCR3d's
+  20 other species (gene and species level: `mhc_species(best_mhc(seq)[1])`), shipped; `decodertcr` = 87 human chains
   / 88 pairs, downloaded once and cached (`~/.cache/tcrkit`). Misses are in `error`.
 - `annotate_mhc`: trust `gene`; `allele` is the closest bundled one
   (`allele_identity` < 1.0 = not bundled). `helix='imgt'` (default) or `'tpm-bench'`.

@@ -76,7 +76,7 @@ ERROR_ROW = {
     'CDR3_aa_start': -1, 'CDR3_aa_end': -1, 'CDR3_aa': '-',
     'query_start': -1, 'query_end': -1, 'species': '-',
     'chain_type': '-', 'v_gene': '-', 'v_identity': -1.0,
-    'j_gene': '-', 'j_identity': -1.0, ERROR_COL: 'ANARCI error',
+    'j_gene': '-', 'j_identity': -1.0, 'germline_species': '-', ERROR_COL: 'ANARCI error',
 }
 
 _DROP_COLS = ['id', 'description', 'evalue', 'bitscore', 'bias', 'scheme']
@@ -184,10 +184,12 @@ def _alignment_details_to_df(anarci_output):
                 'v_identity': g['v_gene'][1] if 'v_gene' in g else '-',
                 'j_gene': g['j_gene'][0][1] if 'j_gene' in g else '-',
                 'j_identity': g['j_gene'][1] if 'j_gene' in g else '-',
+                # the V germline's species; `species` is that of the domain's HMM
+                'germline_species': g['v_gene'][0][0] if 'v_gene' in g else '-',
             })
         except Exception:
             return pd.Series({'v_gene': '-', 'v_identity': '-',
-                              'j_gene': '-', 'j_identity': '-'})
+                              'j_gene': '-', 'j_identity': '-', 'germline_species': '-'})
 
     if 'germlines' in df.columns:
         df = df.join(df.apply(germline_info, axis=1)).drop(columns=['germlines'],
@@ -508,8 +510,9 @@ def anarci(sequences, col_mapping=None, progress_bar=True, include_imgt_index=Fa
     Returns:
         A DataFrame indexed by sequence id, starting with the ``sequence`` you passed,
         then ``CDR{1,2,3}_aa`` and their ``_start`` / ``_end`` positions (1-based into
-        that sequence), ``v_gene`` / ``j_gene`` and their identities, ``species``,
-        ``chain_type``, ``query_start`` / ``query_end``, and ``error`` ('-' when
+        that sequence), ``v_gene`` / ``j_gene`` and their identities, ``species`` (of
+        the HMM the domain matched best), ``germline_species`` (of the V germline gene;
+        the species to trust for a TCR), ``chain_type``, ``query_start`` / ``query_end``, and ``error`` ('-' when
         the sequence numbered). Sequences that failed get :data:`ERROR_ROW`, so the
         frame always has one row per input.
     """

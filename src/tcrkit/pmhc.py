@@ -2,7 +2,9 @@
 
 One function, :func:`mhc_sequence`. It looks an allele up in a reference of 186 class-I
 and class-II alleles - 160 human, 24 mouse, plus ``B2M_human`` and ``B2M_mouse`` for the
-class-I light chain::
+class-I light chain - and 76 MHC and B2M chains of 20 other species, those of TCR3d's
+structures (macaque, pig, cattle, chicken, duck, ...), there for :func:`tcrkit.annotate_mhc`
+to recognise them::
 
     mhc_sequence('HLA-A*02:01')                 # the extracellular domain
     mhc_sequence('HLA-A*02:01', region='full')  # ... with its leader and tails
@@ -121,9 +123,14 @@ def load_mhc_table(path=None, source: str = 'uniprot') -> pd.DataFrame:
     same compact allele name :func:`normalize_mhc` produces, so the two compose
     directly. Each allele's sequence is the UniProt entry standing in for it
     (``accession``), identical to the allele - alleles UniProt has no exact entry for
-    are not bundled; :func:`list_mhc` shows what each source has.
+    are not bundled; :func:`list_mhc` shows what each source has. Then 76 chains of 20
+    other species (``species`` ``'pig'``, ``'chicken'``, ...; ``organism`` the
+    scientific name): the UniProt entries RCSB maps TCR3d's structures' MHC and B2M
+    chains to, for recognising a chain's gene and species rather than its exact
+    allele.
 
-    Columns: ``allele``; ``gene`` / ``mhc_class`` / ``species`` / ``mhc_prefix``;
+    Columns: ``allele``; ``gene`` / ``mhc_class`` / ``species`` / ``organism`` /
+    ``mhc_prefix``;
     ``sequence`` (the full UniProt sequence, signal peptide and tails included) and its
     ``length``; ``source`` (``'uniprot'`` or ``'uniparc'``) and ``accession``; the
     membrane topology as 1-based span lists - ``signal_spans``, ``outside_spans``,
@@ -155,7 +162,7 @@ def load_mhc_table(path=None, source: str = 'uniprot') -> pd.DataFrame:
     return _bundled_table()
 
 
-def list_mhc(what: str = 'alleles', source: str = 'uniprot') -> pd.DataFrame:
+def list_mhc(what: str = 'alleles', source: str = 'uniprot', species=None) -> pd.DataFrame:
     """What a source has: its MHC alleles, genes, or (DecoderTCR) pairs. For looking at.
 
     >>> list_mhc('genes').query("gene == 'DRB1'")[['gene', 'n_alleles']].values.tolist()
@@ -169,8 +176,13 @@ def list_mhc(what: str = 'alleles', source: str = 'uniprot') -> pd.DataFrame:
             ``mhc_class``. The bundled reference stores single chains, so pairs need
             ``source='decodertcr'``.
         source: ``'uniprot'`` (default) or ``'decodertcr'`` (downloaded on first use).
+        species: only these species, e.g. ``'human'`` or ``['human', 'mouse']``; the
+            common name (``'pig'``) or the scientific one (``'Sus scrofa'``), any case.
+            Default: all.
     """
     table = load_mhc_table(source=source)
+    if species is not None:
+        table = table[_species_mask(table, species)]
     if what == 'alleles':
         return table[['allele', 'gene', 'mhc_class', 'species']].reset_index(drop=True)
     if what == 'genes':
@@ -182,7 +194,8 @@ def list_mhc(what: str = 'alleles', source: str = 'uniprot') -> pd.DataFrame:
             raise ValueError("the bundled reference stores single chains, not pairs; "
                              "pairs come from source='decodertcr'")
         allele_of = dict(zip(table['decodertcr_name'], table['allele']))
-        keys = sorted({k for ks in table['pairs'] for k in ks.split(', ')})
+        keys = sorted({k for ks in table['pairs'] for k in ks.split(', ')
+                       if set(k.split('__')) <= allele_of.keys()})
         rows = []
         for key in keys:
             a, b = key.split('__')
@@ -190,6 +203,22 @@ def list_mhc(what: str = 'alleles', source: str = 'uniprot') -> pd.DataFrame:
                          'mhc_class': 'I' if b == 'B2M' else 'II'})
         return pd.DataFrame(rows)
     raise ValueError(f"what must be 'alleles', 'genes' or 'pairs', got {what!r}")
+
+
+def _species_mask(table: pd.DataFrame, species) -> pd.Series:
+    """Rows of `table` whose ``species`` or ``organism`` is one of `species`."""
+    wanted = {species} if isinstance(species, str) else set(species)
+    wanted = {str(w).strip().lower() for w in wanted}
+    names = [table[c].astype(str).str.lower() for c in ('species', 'organism') if c in table]
+    known = set().union(*(set(n) for n in names))
+    unknown = wanted - known
+    if unknown:
+        options = ', '.join(sorted(set(table['species'])))
+        raise ValueError(f'species {sorted(unknown)} not in this source; it has: {options}')
+    mask = pd.Series(False, index=table.index)
+    for n in names:
+        mask |= n.isin(wanted)
+    return mask
 
 
 #: The topology regions of a membrane protein, and the span column each is recorded in,

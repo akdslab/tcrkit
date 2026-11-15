@@ -111,12 +111,48 @@ def test_mhc_database_order():
     db = mhc.mhc_database()
     assert list(db.columns) == ['allele', 'sequence', 'gene', 'class']
     assert db['gene'].iloc[-1] == 'B2M' and {'A', 'E', 'DRB1'} <= set(db['gene'])
+    # human and mouse first, ending with their B2Ms; then the other species
+    assert list(db['allele'].iloc[182:184]) == ['B2M_human', 'B2M_mouse']
 
 
 def test_best_mhc():
     gene, allele, score = mhc.best_mhc(HLA_A2)
     assert (gene, allele, round(score, 2)) == ('A', 'A0201', 0.53)
     assert mhc.best_mhc(B2M)[0] == 'B2M'
+
+
+#: MHC chains of other species, as deposited: pig SLA-1*04 (3QQ3), chicken BF2*04 (4G42)
+#: and chicken BLB2 (7APZ: a peptide-linker in front of the beta chain).
+OTHER_SPECIES = {
+    'SLA-1': ('pig', 'heavy', 'GPHSLSYFYTAVSRPDRGDSRFIAVGYVDDTQFVRFDNYAPNPRMEPRVPWIQQEGQEYWDRETRNVKE'
+              'TAQTYGVGLNTLRGYYNQSEAGSHTLQSMYGCYLGPDGLLLHGYRQDAYDGADYIALNEDLRSWTAADMAAQ'
+              'ITKRKWEAADEAERRRSYLQGLCVESLRRYLEMGKDTLQRAEPPKTHVTRHPSSDLGVTLRCWALGFYPKEIS'
+              'LTWQREGQDQSQDMELVETRPSGDGTFQKWAALVVPPGEEQSYTCHVQHEGLQEPLTLRWD'),
+    'BF2': ('chicken', 'heavy', 'MEFELHTLRYIRTAMTDPGPGQPWFVTVGYVDGELFVHYNSTARRYVPRTEWIAANTDQQYWDGQTQ'
+            'IGQLNEQINRENLGIRQRRYNQTGGSHTVQWMFGCDILEDGTIRGYRQSAYDGRDFIALDKDMKTFTAAVPEA'
+            'VPTKRKWEEESEPERWKNYLEETCVEWLRRYVEYGKAELGRRERPEVRVWGKEADGILTLSCRAHGFYPRPIV'
+            'VSWLKDGAVRGQDAHSGGIVPNGDGTYHTWVTIEAQPGDGDKYQCRVEHASLPQPGLYSWKL'),
+    'BLB2': ('chicken', 'beta', 'KMSMSTMNMPMAMKVGGGGSGGGGSGGGGSSAFFFCGAIFECHYLNGTERVRYLQRYIYNRQQLVHF'
+             'DSDVGKFVADTPLGEPQAEYWNSNAELLENIMNIADGSCRHNYGILESFTVQRSVEPKVRVSALQSGSLPETDR'
+             'LACYVTGFYPPEIEVKWFLNGREETERVVSTDVMQNGDWTYQVLVVLETVPRRGDSYVCRVEHASLRQPISQA'
+             'WEPPADAGRSK'),
+}
+
+
+@pytest.mark.parametrize('gene', OTHER_SPECIES)
+def test_best_mhc_other_species(gene):
+    species, chain, seq = OTHER_SPECIES[gene]
+    got, allele, score = mhc.best_mhc(seq)
+    assert got == gene and score > 0.07 and mhc.mhc_species(allele) == species
+    assert mhc.mhc_chain(gene) == chain
+
+
+def test_mhc_species():
+    assert mhc.mhc_species('A0201') == 'human' and mhc.mhc_species('H2-Kb') == 'mouse'
+    assert mhc.mhc_species('B2M_chicken') == 'chicken' and mhc.mhc_species('nope') is None
+    # human chains still match human alleles
+    assert mhc.mhc_species(mhc.best_mhc(HLA_A2)[1]) == 'human'
+    assert mhc.mhc_species(mhc.best_mhc(B2M)[1]) == 'human'
 
 
 def test_mhc_span_leaves_out_a_tag():

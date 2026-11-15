@@ -26,9 +26,17 @@ the allele (B2M_mouse differs at one residue, the allotype site). H2-AAs, H2-AAu
 H2-Dq are mature chains without a signal peptide; H2-Dq comes from UniParc
 (`UPI00005FF33A`), as UniProtKB has no H-2D^q.
 
+Then 76 MHC and B2M chains of 20 other species, for gene- and species-level matching:
+the UniProt entries RCSB (SIFTS) maps the MHC and B2M chains of TCR3d's other-species
+pMHC structures to, one per entry (near-identical ones left out). `note` names the
+structures and the identity over their chain. Two have no UniProtKB entry and come from
+UniParc, as deposited: the black flying fox B2M (`UPI00116155BB`; its UniProtKB entry is
+a 331-residue gene model) and the big brown bat DR beta (`UPI0032B08EC0`). Per species:
+rhesus macaque (*Macaca mulatta*) 6; pig (*Sus scrofa*) 13; cattle (*Bos taurus*) 3; horse (*Equus caballus*) 1; dog (*Canis lupus familiaris*) 3; cat (*Felis catus*) 4; giant panda (*Ailuropoda melanoleuca*) 2; rabbit (*Oryctolagus cuniculus*) 1; rat (*Rattus norvegicus*) 3; black flying fox (*Pteropus alecto*) 2; little brown bat (*Myotis lucifugus*) 1; big brown bat (*Eptesicus fuscus*) 2; brushtail possum (*Trichosurus vulpecula*) 1; chicken (*Gallus gallus*) 13; duck (*Anas platyrhynchos*) 9; great reed warbler (*Acrocephalus arundinaceus*) 2; grass carp (*Ctenopharyngodon idella*) 4; clawed frog (*Xenopus laevis*) 2; green anole (*Anolis carolinensis*) 2; nurse shark (*Ginglymostoma cirratum*) 2.
+
 | column | meaning |
 |---|---|
-| `allele`, `species`, `gene`, `mhc_class`, `mhc_prefix` | the allele as `normalize_mhc` writes it, and descriptors |
+| `allele`, `species`, `organism`, `gene`, `mhc_class`, `mhc_prefix` | the allele as `normalize_mhc` writes it (other species: TCR3d's name), and descriptors |
 | `source`, `accession`, `source_release`, `sequence_version` | `uniprot` or `uniparc`, the entry, the UniProt release, its `SV=` |
 | `identity_to_previous`, `coverage_of_previous`, `note` | how the entry was chosen |
 | `deeptmhmm_prediction`, `deeptmhmm_version`, `topology_length` | DeepTMHMM 1.0.24: `SP+TM`, `TM`, `SP` or `GLOB` |

@@ -266,6 +266,17 @@ def test_anarci_numbers_a_beta_chain():
     assert r['CDR3_aa'] == 'ASSFTDTQY'
     # positions index back into the sequence that was passed in
     assert BETA_AA[r['CDR3_aa_start'] - 1:r['CDR3_aa_end']] == r['CDR3_aa']
+    assert r['germline_species'] == 'human'
+
+
+def test_anarci_germline_species():
+    """The V germline's species, which can differ from the HMM's: the mouse 2C TCR's
+    beta chain (PDB 2E7L chain E) matches the human beta HMM best."""
+    beta_2c = ('EAAVTQSPRNKVAVTGEKVTLSCNQTNNHNNMYWYRQDTGHELRLIYYSYGAGSTEKGDIPDGYKASRPSQENF'
+               'SLTLESATPSQTSVYFCASGGGGTLYFGAGTRLSVLSS')
+    r = tcrkit.anarci(beta_2c).iloc[0]
+    assert (r['species'], r['germline_species'], r['v_gene']) == ('human', 'mouse', 'TRBV13-2*01')
+    assert tcrkit.anarci('AAAA').iloc[0]['germline_species'] == '-'
 
 
 def test_anarci_allow_prevents_an_alpha_being_called_delta():
@@ -586,7 +597,7 @@ def test_mhc_sequence_full_is_longer_than_the_domain():
 @needs_mhc_ref
 def test_mhc_reference_has_the_expected_shape():
     tab = load_mhc_table()
-    assert len(tab) == 186                     # one table for lookup and detection
+    assert len(tab) == 262                     # one table for lookup and detection
     assert {'allele', 'sequence', 'gene', 'mhc_class', 'species', 'prediction',
             'topology_from', 'outside_spans', 'in_detect'} <= set(tab.columns)
     assert tab['allele'].is_unique

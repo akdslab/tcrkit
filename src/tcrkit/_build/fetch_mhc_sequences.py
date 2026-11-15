@@ -4,6 +4,7 @@ Internal maintenance script, not part of the API::
 
     python -m tcrkit._build.fetch_mhc_sequences            # refresh from UniProt
     python -m tcrkit._build.fetch_mhc_sequences --check    # compare, write nothing
+    python -m tcrkit._build.fetch_mhc_sequences --new-only # add entries not in the FASTA yet
 
 Which entries: the ``source`` / ``accession`` columns of ``data/mhc_annotations.csv``,
 one entry per tcrkit MHC allele (several alleles can share one). ``source`` is
@@ -15,7 +16,9 @@ exactly as UniProt serves them. ``source_release`` records the UniProt release a
 UniProtKB and UniParc data are CC BY 4.0 (https://www.uniprot.org/help/license).
 
 After a refresh, re-run ``python -m tcrkit._build.annotate_mhc_deeptmhmm``: the membrane
-topology belongs to the sequences.
+topology belongs to the sequences. ``--new-only`` downloads only the entries the FASTA
+lacks and appends them, leaving the others as they are; then run the DeepTMHMM step with
+``--missing-only``.
 """
 
 from __future__ import annotations
@@ -89,15 +92,20 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     p.add_argument('--check', action='store_true',
                    help='report differences from the bundled FASTAs, write nothing')
+    p.add_argument('--new-only', action='store_true',
+                   help='download only the entries the FASTA lacks, and append them')
     args = p.parse_args(argv)
 
     table = pd.read_csv(TABLE)
     unknown = set(table['source']) - set(SOURCES)
     if unknown:
         raise SystemExit(f'unknown source(s) {sorted(unknown)} in {TABLE.name}')
+    have = ({acc for acc, _, _ in parse_fasta(FASTA.read_text())}
+            if args.new_only and FASTA.exists() else set())
     text, records, release = '', [], {}
     for source in SOURCES:
-        accessions = list(dict.fromkeys(table.loc[table['source'] == source, 'accession']))
+        accessions = [a for a in dict.fromkeys(table.loc[table['source'] == source, 'accession'])
+                      if a not in have]
         if accessions:
             part, release[source] = download(source, accessions)
             text += part
@@ -105,18 +113,31 @@ def main(argv=None) -> int:
     if FASTA.exists():
         old = {acc: rec for acc, _, rec in parse_fasta(FASTA.read_text())}
         changed = [a for a, _, rec in records if old.get(a) != rec]
-        print(f'UniProt {release.get("uniprot")}: {len(records)} entries, {len(changed)} differ '
-              f'from {FASTA.name}{": " + ", ".join(changed) if changed else ""}')
+        if args.new_only:
+            print(f'UniProt {release.get("uniprot") or release.get("uniparc")}: {len(records)} new entries'
+                  f'{": " + ", ".join(a for a, _, _ in records) if records else ""}')
+        else:
+            print(f'UniProt {release.get("uniprot")}: {len(records)} entries, {len(changed)} '
+                  f'differ from {FASTA.name}{": " + ", ".join(changed) if changed else ""}')
     else:
         print(f'UniProt {release.get("uniprot")}: {len(records)} entries')
     if args.check:
         return 0
-
-    FASTA.write_text(text)
-    table['source_release'] = table['source'].map(release)
+    if args.new_only:
+        if not records:
+            print(f'every entry is already in {FASTA.name}')
+            return 0
+        old = FASTA.read_text() if FASTA.exists() else ''
+        FASTA.write_text(old + ('' if not old or old.endswith('\n') else '\n') + text)
+        rows = table['accession'].isin([a for a, _, _ in records])
+    else:
+        FASTA.write_text(text)
+        rows = pd.Series(True, index=table.index)
+    table.loc[rows, 'source_release'] = table.loc[rows, 'source'].map(release)
     version = {acc: int(m.group(1)) if (m := re.search(r'SV=(\d+)', h)) else None
                for acc, h, _ in records}
-    table['sequence_version'] = table['accession'].map(version).astype('Int64')
+    table.loc[rows, 'sequence_version'] = pd.to_numeric(
+        table.loc[rows, 'accession'].map(version), errors='coerce')
     table.to_csv(TABLE, index=False)
     print(f'wrote {FASTA.name} and updated {TABLE.name}')
     return 0

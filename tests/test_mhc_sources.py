@@ -21,11 +21,14 @@ from tcrkit._build import fetch_mhc_sequences as fetch
 
 def test_bundled_table_joins_the_fasta_and_the_annotations():
     t = tcrkit.load_mhc_table()
-    assert len(t) == 186 and t['allele'].is_unique and t['accession'].is_unique
+    assert len(t) == 262 and t['allele'].is_unique and t['accession'].is_unique
+    # 160 human, 24 mouse, 2 B2M; then 76 chains of TCR3d's other species
+    assert (t['species'].isin(['human', 'mouse'])).sum() == 186
+    assert t['species'].nunique() == 22 and t['organism'].notna().all()
     assert set(t['source']) == {'uniprot', 'uniparc'}
     assert t['sequence'].notna().all()
     assert (t['length'] == t['sequence'].str.len()).all()
-    assert t['in_detect'].sum() == 184
+    assert t['in_detect'].sum() == 260
     # what annotate_mhc / mhc_sequence / the tpm-bench helices read
     for col in ('signal_spans', 'outside_spans', 'tmhelix_spans', 'inside_spans',
                 'prediction', 'detect_rank', 'detect_class', 'helix_ind',
@@ -162,14 +165,26 @@ def test_build_deeptmhmm_parser(tmp_path):
 
 def test_list_mhc_bundled():
     alleles = tcrkit.list_mhc()
-    assert len(alleles) == 186 and list(alleles.columns) == ['allele', 'gene', 'mhc_class', 'species']
+    assert len(alleles) == 262 and list(alleles.columns) == ['allele', 'gene', 'mhc_class', 'species']
     genes = tcrkit.list_mhc('genes').set_index('gene')
-    assert genes['n_alleles'].sum() == 186
+    assert genes['n_alleles'].sum() == 262
     assert 'A0201' in genes.at['A', 'alleles']
     with pytest.raises(ValueError, match='single chains'):
         tcrkit.list_mhc('pairs')
     with pytest.raises(ValueError, match="what must be"):
         tcrkit.list_mhc('loci')
+
+
+def test_list_mhc_species_filter():
+    every = tcrkit.list_mhc()
+    human = tcrkit.list_mhc(species='human')
+    assert set(human['species']) == {'human'} and 0 < len(human) < len(every)
+    both = tcrkit.list_mhc(species=['Human', 'mouse'])
+    assert set(both['species']) == {'human', 'mouse'} and len(both) == 186
+    pig = tcrkit.list_mhc('genes', species='Sus scrofa')        # scientific name
+    assert set(pig['species']) == {'pig'}
+    with pytest.raises(ValueError, match='not in this source'):
+        tcrkit.list_mhc(species='martian')
 
 
 def test_list_mhc_decodertcr_pairs(decodertcr):

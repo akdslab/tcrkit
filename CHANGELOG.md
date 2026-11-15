@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.9 - 2026-11-14
+
+- MHC chains of 20 more species (macaque, pig, cattle, chicken, duck, ...: those of
+  TCR3d's structures): 76 UniProt entries, matched at gene and species level. New
+  `tcrkit.mhc.mhc_species(allele)`; `load_mhc_table()` has an `organism` column.
+  Human and mouse matches are unchanged. `list_mhc(species=...)` keeps only some species.
+- New `germline_species` column in `anarci`: the V germline's species. `species` is
+  the HMM's, which can differ (2E7L's mouse beta chain: HMM human, germline mouse).
+- `anarci(..., include_imgt_index=True)` always has the `imgt_dict` column, also when
+  no sequence is numbered (a pMHC).
+
 ## 0.1.8 - 2026-11-13
 
 - The docs and the three user skills come with the wheel: `tcrkit.docs()` / `tcrkit docs

@@ -24,7 +24,7 @@ from .pmhc import TOPOLOGY as _TOPOLOGY_COLS
 from .gdomain import _MIN_SCORE, GDOMAINS, HELIX_METHODS, number_gdomains, tpm_bench_helix
 
 __all__ = ['annotate_mhc', 'gene_domains', 'best_mhc', 'mhc_chain', 'mhc_span',
-           'mhc_database', 'B2M_SEQUENCE', 'HELIX_METHODS', 'COLLAPSIBLE']
+           'mhc_species', 'mhc_database', 'B2M_SEQUENCE', 'HELIX_METHODS', 'COLLAPSIBLE']
 
 _COLUMNS = ['gene', 'allele', 'allele_identity', 'mhc_class', 'score', 'span', 'domains', 'domain_spans',
             'helix', 'regions', *_TOPOLOGY_COLS, ERROR_COL]
@@ -54,7 +54,8 @@ def _local_aligner():
 
 @lru_cache(maxsize=1)
 def mhc_database() -> pd.DataFrame:
-    """The MHC sequences genes are matched on: HLA class I, HLA-E, class II, then B2M.
+    """The MHC sequences genes are matched on: HLA class I, HLA-E, class II, mouse and
+    B2M, then the other species' chains (TCR3d's: macaque, pig, chicken, ...).
 
     Columns ``allele``, ``sequence``, ``gene`` and ``class`` (1 or 2; 1 for B2M). The
     order matters: of equally good matches the first one wins.
@@ -89,6 +90,25 @@ def mhc_chain(gene: str | None) -> str | None:
     if classes[gene] == 1:
         return 'heavy'
     return 'alpha' if re.sub(r'\d+$', '', gene).endswith('A') else 'beta'
+
+
+def mhc_species(allele: str | None) -> str | None:
+    """The species of an allele of :func:`mhc_database` (``'human'``, ``'mouse'``,
+    ``'pig'``, ``'chicken'``, ...), or None for an allele that is not in it.
+
+    >>> mhc_species('A0201'), mhc_species('not-an-allele')
+    ('human', None)
+
+    The species of a chain's closest allele: ``mhc_species(best_mhc(sequence)[1])``.
+    """
+    return _allele_species().get(allele)
+
+
+@lru_cache(maxsize=1)
+def _allele_species() -> dict[str, str]:
+    from .pmhc import load_mhc_table
+    table = load_mhc_table()
+    return dict(zip(table['allele'], table['species']))
 
 
 @lru_cache(maxsize=1)
