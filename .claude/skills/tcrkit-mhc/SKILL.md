@@ -11,6 +11,7 @@ tcrkit.mhc_sequence('HLA-A*02:01')                            # extracellular do
 tcrkit.mhc_sequence('A*02:01', region='full', paired=True)    # + B2M; regions below
 tcrkit.mhc_sequence('DRA*01:02', source='decodertcr')         # other source
 tcrkit.annotate_mhc(seq)                                      # gene, allele, domains, helix
+tcrkit.annotate(seq)['chain_type']     # any chain: TCR_alpha/beta, MHC_I, MHC_II_alpha/beta, B2M, peptide
 tcrkit.annotate_mhc(seq, collapse=True)                       # strands A-D, turns, helix
 tcrkit.annotate_mhc(seq, collapse='topology')                 # signal peptide .. tail
 tcrkit.annotate_mhc(seq, per_residue=True, domains=True)      # + alpha3/beta2/B2M, C-LIKE + 1000

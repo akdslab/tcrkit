@@ -8,6 +8,7 @@ The capabilities, all re-exported here:
     normalize_mhc   standardize HLA/MHC allele names                        (mhcgnomes)
     mhc_sequence    look up an MHC allele's protein sequence                (reference table)
     annotate_mhc    an MHC chain's gene, IMGT numbering and groove helices  (HLA + IMGT G-DOMAIN)
+    annotate        any chain: TCR, MHC, B2M or peptide, and its annotation (anarci + annotate_mhc)
     add_cdr3_junctions  put the IMGT junction residues back on a CDR3    (reference table)
 
 They live in these modules: ``stitch``, ``anarci``, ``normalize`` (allele *names*),
@@ -56,7 +57,7 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.9'
+__version__ = '0.1.10'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc

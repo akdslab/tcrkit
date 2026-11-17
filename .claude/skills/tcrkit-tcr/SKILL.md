@@ -20,6 +20,7 @@ tcrkit.anarci(seq, allow={'A', 'B'}, collapse='gene_segment', domains=True)  # l
 tcrkit.anarci(seq, allow={'A', 'B'}, domains=True, show=True)   # prints seq with V/J/C, CDR lines; returns None
 tcrkit.anarci(seq, allow={'A', 'B'}, domains=True, mark_regions=True)  # region_seq, segment_seq
 tcrkit.build_tcr_pmhc(df)                                 # all steps, self-checked
+tcrkit.annotate(seq)['chain_type']     # any chain: TCR_alpha/beta, MHC_I, MHC_II_alpha/beta, B2M, peptide
 ```
 
 - `stitch` needs `stitchrdl -s human` once; it repairs nothing - run

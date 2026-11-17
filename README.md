@@ -12,8 +12,9 @@ Python library or from the command line.
   (`A*0201` → `A0201`).
 * **Repair CDR3s.** Put back the conserved C / F junction residues a CDR3 was reported
   without.
-* **Identify a sequence.** For a TCR chain: its chain type and V / J genes. For an MHC
-  chain: its gene and closest allele.
+* **Identify a sequence.** `annotate` says what any chain is (TCR alpha / beta / gamma /
+  delta, MHC class I or II, B2M, peptide) without being told. For a TCR chain: its V / J
+  genes; for an MHC chain: its gene and closest allele.
 * **Annotate a sequence.** IMGT numbering, CDR1–3, framework and constant domain of a
   TCR; domains, strands and groove helices of an MHC. Print it coloured with `show=True`.
 * **Repertoire metrics.** Diversity, overlap, generation probability and tcrdist.
@@ -27,6 +28,7 @@ Python library or from the command line.
 | `anarci` | TCR sequence → chain type, V/J genes, CDR1/2/3, IMGT numbering; per residue, which part is V / J / C | [ANARCI](https://github.com/oxpig/ANARCI) + IMGT C-DOMAIN |
 | `normalize_tcr`, `normalize_mhc` | messy gene / allele names → IMGT / standard form | [tidytcells](https://tidytcells.readthedocs.io/), [mhcgnomes](https://github.com/pirl-unc/mhcgnomes) |
 | `mhc_sequence`, `list_mhc` | MHC allele → protein sequence, whole or by membrane region | bundled UniProt table |
+| `annotate` | any sequence → its chain type (TCR, MHC, B2M, peptide) and that kind's annotation | `anarci` + `annotate_mhc` |
 | `annotate_mhc` | MHC sequence → gene, closest allele, IMGT G-domain numbering, groove helices; with `domains=True` also α3 / β2 / B2M (IMGT C-like) | bundled table + IMGT G-DOMAIN |
 | `imgt_regions`, `print_residues` | the IMGT ranges of CDRs and helices; a sequence printed with its annotation | IMGT |
 | `build_tcr_pmhc` | a table of TCR pairs + MHC → the whole complex, self-checked | all of the above |
@@ -117,6 +119,20 @@ tcrkit.annotate_mhc(a2, domains=True, show=True)                    # print it, 
 
 Trust the `gene`; treat the `allele` as approximate. It is the closest of the 184 bundled
 alleles, and `allele_identity` below 1.0 means yours is not among them.
+
+**Don't know what a sequence is?** `annotate` tells you, and annotates it as its kind:
+
+```python
+b2m = tcrkit.mhc_sequence('B2M_human', squeeze=True)['sequence']
+tcrkit.annotate({'tcr': beta['sequence_aa'], 'mhc': a2, 'b2m': b2m, 'pep': 'GILGFVFTL'})
+#     chain_type species     v_gene gene     allele  ...
+# tcr   TCR_beta   human  TRBV19*01  NaN        NaN
+# mhc      MHC_I   human        NaN    A      A0201
+# b2m        B2M   human        NaN  B2M  B2M_human
+# pep    peptide     NaN        NaN  NaN        NaN
+```
+
+Pass `allow={'A', 'B'}` when you expect alpha/beta TCRs, as for `anarci`.
 
 **Which IMGT positions are the CDRs and helices?**
 
