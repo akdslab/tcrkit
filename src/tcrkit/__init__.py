@@ -60,6 +60,7 @@ __version__ = '0.1.9'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc
+from .annotate import annotate
 from .cdr3_junction import (
     add_cdr3_junctions,
     build_junction_table,
@@ -91,6 +92,8 @@ __all__ = [
     'print_residues', 'imgt_regions',
     # MHC chains: gene, IMGT numbering, groove helices
     'annotate_mhc',
+    # any chain: what it is (TCR, MHC, B2M, peptide) and its annotation
+    'annotate',
     # 5. cdr3 junctions
     'add_cdr3_junctions', 'junction_of', 'load_junction_table',
     'build_junction_table',
