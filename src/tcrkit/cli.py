@@ -6,6 +6,7 @@
     tcrkit normalize-mhc  standardize HLA/MHC allele names
     tcrkit add-cdr3-junctions   put the IMGT junction residues back on a CDR3
     tcrkit annotate-mhc   an MHC chain's gene, IMGT numbering and groove helices
+    tcrkit annotate       any chain: TCR, MHC, B2M or peptide, and its annotation
     tcrkit diversity      entropy, clonality and richness of a repertoire
     tcrkit morisita-horn  overlap between repertoires
     tcrkit generation-probability   OLGA pgen of a CDR3
@@ -456,6 +457,50 @@ def _add_annotate_mhc(sub):
 
 
 # ---------------------------------------------------------------------------
+# annotate: any chain
+# ---------------------------------------------------------------------------
+
+def _cmd_annotate(args):
+    from .annotate import annotate
+
+    if args.in_csv:
+        df = _read_table(args.in_csv, args.sep)
+        if args.seq_col not in df.columns:
+            raise SystemExit(f"error: --seq-col {args.seq_col!r} is not a column "
+                             f"in {args.in_csv}. Columns: {list(df.columns)}")
+        seqs = df[args.seq_col]
+    else:
+        _require(args, 'seq')
+        seqs = list(args.seq)
+    extra = {'allow': set(args.allow)} if args.allow else {}
+    out = annotate(seqs, per_residue=args.per_residue, progress_bar=not args.quiet, **extra)
+    if not args.per_residue and not (args.out_csv or args.json):
+        out = out.drop(columns=['sequence'])
+    _emit(out, args, index=bool(args.in_csv) or args.per_residue)
+
+
+def _add_annotate(sub):
+    p = sub.add_parser(
+        'annotate', help='any chain: TCR, MHC, B2M or peptide, and its annotation',
+        description='Say what each sequence is (TCR alpha/beta/gamma/delta, MHC class I, '
+                    'class II alpha/beta, B2M, peptide) and annotate it: V/J genes and '
+                    'CDRs for a TCR, gene, allele and groove helices for an MHC chain.',
+        epilog="examples:\n"
+               "  tcrkit annotate --seq GSHSMRYFFTSVSRPGRGEPRFIAVGYVDD... GILGFVFTL\n"
+               "  tcrkit annotate --in-csv chains.csv --seq-col sequence --out-csv out.csv",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('--seq', nargs='+', help='amino-acid sequence(s)')
+    p.add_argument('--allow', nargs='+', metavar='TYPE',
+                   help="ANARCI chain types to consider, e.g. --allow A B for alpha/beta "
+                        "(default: all, so an alpha chain can come back as delta)")
+    p.add_argument('--per-residue', action='store_true', help='one row per residue')
+    p.add_argument('--in-csv', help='CSV/TSV with a column of sequences')
+    p.add_argument('--seq-col', default='sequence', help='(default: sequence)')
+    p.set_defaults(func=_cmd_annotate)
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Repertoire metrics: diversity, morisita-horn, generation-probability
 # ---------------------------------------------------------------------------
 
@@ -682,7 +727,7 @@ def build_parser():
 
     sub = parser.add_subparsers(dest='command', metavar='<command>')
     for add in (_add_stitch, _add_anarci, _add_normalize_tcr, _add_normalize_mhc,
-                _add_fix_junction, _add_annotate_mhc,
+                _add_fix_junction, _add_annotate_mhc, _add_annotate,
                 _add_diversity, _add_morisita_horn, _add_generation_probability):
         p = add(sub)
         # Options every subcommand shares, added last so they sort after the specific ones.
