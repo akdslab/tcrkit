@@ -88,6 +88,36 @@ Out: `{chain}_sequence_aa` per chain, `error`, `thimble_log`.
 
 ## 2. Numbering and annotation
 
+### `annotate(sequences, per_residue=False, helix='imgt', col_mapping=None, squeeze=False, progress_bar=True, **anarci_kwargs)`
+
+What a sequence is, when you don't know: every sequence goes through `anarci` and
+`annotate_mhc`, and `chain_type` says which recognised it.
+
+| `chain_type` | found by |
+|---|---|
+| `TCR_alpha`, `TCR_beta`, `TCR_gamma`, `TCR_delta`, `antibody` | `anarci` (a V domain) |
+| `MHC_I`, `MHC_II_alpha`, `MHC_II_beta`, `B2M` | `annotate_mhc` (an MHC gene) |
+| `peptide` | neither, and at most 30 residues (`PEPTIDE_MAX_LENGTH`) |
+| `unknown` | neither, or both; the reason is in `error` |
+
+Out, one row per sequence: `sequence`, `chain_type`, `species`, then the TCR columns
+`v_gene`, `j_gene`, `CDR1_aa` … `CDR3_aa`, the MHC columns `gene`, `allele`,
+`allele_identity`, `mhc_class`, `helix`, and for both `domains` (`'V, C'`;
+`'G-ALPHA1, G-ALPHA2, C-LIKE'`) and `error`. A column that doesn't apply to a chain is
+empty. `per_residue=True` gives one table for every chain type: `position`, `aa`,
+`chain_type`, `domain`, `imgt`, `region`, plus `gene_segment` for a TCR and `gene`,
+`allele`, `helix`, `topology` for an MHC chain; `print_residues` prints it.
+
+```python
+tcrkit.annotate(seq, squeeze=True)['chain_type']         # 'TCR_beta', 'MHC_I', 'peptide', ...
+tcrkit.annotate(df, col_mapping={'sequence': 'seq'})     # a mixed table
+tcrkit.annotate(seq, allow={'A', 'B'})                   # alpha/beta only
+```
+
+`**anarci_kwargs` go to `anarci`. Without `allow`, ANARCI picks among every chain type it
+knows, so an alpha chain can come back as `TCR_delta`. For the full output of one kind,
+call `anarci` or `annotate_mhc`.
+
 ### `anarci(sequences, allow=..., ...)`
 
 IMGT-numbers protein sequences and reports their V/J genes and CDR loops.
@@ -660,11 +690,11 @@ over chains (tcrdist3's paired distance). `long=True` gives one row per pair (`i
 
 ## Command line
 
-Nine subcommands mirror the Python API:
+Ten subcommands mirror the Python API:
 
 ```
 tcrkit stitch | anarci | normalize-tcr | normalize-mhc | add-cdr3-junctions
-       annotate-mhc
+       annotate-mhc | annotate
        diversity | morisita-horn | generation-probability
        docs | skills
 ```

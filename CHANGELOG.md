@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10 - 2026-11-17
+
+- New `annotate`: what any sequence is (`chain_type`: TCR alpha / beta / gamma / delta,
+  MHC class I, class II alpha / beta, B2M, peptide) and that kind's annotation, per
+  sequence or per residue. Also `tcrkit annotate`. Nothing else changes.
+
 ## 0.1.9 - 2026-11-14
 
 - MHC chains of 20 more species (macaque, pig, cattle, chicken, duck, ...: those of
