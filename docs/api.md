@@ -88,7 +88,7 @@ Out: `{chain}_sequence_aa` per chain, `error`, `thimble_log`.
 
 ## 2. Numbering and annotation
 
-### `annotate(sequences, per_residue=False, helix='imgt', col_mapping=None, squeeze=False, progress_bar=True, **anarci_kwargs)`
+### `annotate(sequences, per_residue=False, helix='imgt', col_mapping=None, squeeze=False, progress_bar=True, allele_source='motifatlas', **anarci_kwargs)`
 
 What a sequence is, when you don't know: every sequence goes through `anarci` and
 `annotate_mhc`, and `chain_type` says which recognised it.
@@ -318,6 +318,7 @@ alongside each sequence:
 | `'signal_peptide'` | the cleaved N-terminal leader | `signal`, `leader` |
 | `'transmembrane'` | the membrane-spanning helix | `tm`, `tmhelix` |
 | `'cytoplasmic'` | the intracellular tail | `intracellular`, `inside`, `tail` |
+| `'groove'` | the peptide-binding G domains: class I α1 + α2, class II α1 or β1 (first to last IMGT G-domain residue) | `g_domain`, `binding_groove` |
 
 `regions` names what the returned sequence contains, and the four region columns give
 their ranges — renumbered from 1 inside that sequence, empty for anything it does not
@@ -357,7 +358,23 @@ tcrkit.mhc_sequence('HLA-A*02:01')                          # bundled
 tcrkit.mhc_sequence('HLA-A*02:01', source='decodertcr')     # DecoderTCR
 tcrkit.mhc_sequence('DRB1*01:01', source='decodertcr')      # one chain of a DecoderTCR pair
 tcrkit.mhc_sequence('DRA*01:02__DRB1*01:01', paired=True, source='decodertcr')
+tcrkit.mhc_sequence('B*51:250', source='motifatlas', region='groove')   # MHC Motif Atlas
 ```
+
+`source='motifatlas'` is the [MHC Motif Atlas](http://mhcmotifatlas.org): 13,966 class I
+alleles (human A/B/C/E/G, 8 mouse H2) and 865 class II chains (human DR/DQ/DP, cattle,
+mouse, chicken), downloaded on first use and cached (`$TCRKIT_CACHE/motifatlas`). Its
+allele names are normalized once, when the table is first built; the Motif Atlas's own
+spelling stays in `motifatlas_name`.
+
+- **Class I is only the groove** (181 residues, α1 + α2 from mature residue 2), so only
+  `region='groove'` works for it; any other region leaves `sequence` empty and says why
+  in `error`. The bundled groove has one more residue, mature residue 1.
+- **Class II chains are full length**, and get their topology from the bundled
+  reference by alignment, as DecoderTCR's do: every region is the same stretch as from
+  the bundled source. 14 cattle chains carry alignment gaps (`-`) in the Motif Atlas;
+  the gaps are removed.
+- **B2M** is not in the Motif Atlas; class I pairs take the bundled one.
 
 **A region means the same thing whichever source it comes from.** DecoderTCR's
 sequences are mature chains with no topology of their own, so each is annotated against
@@ -375,7 +392,7 @@ exclusive.
 ### `load_mhc_table(path=None, source='uniprot')` · `bundled_mhc_table_path()` · `MHC_SOURCES`
 
 `load_mhc_table()` returns the whole reference as a DataFrame (cached per session), for
-either source. The bundled one is two files, `mhc_uniprot.fasta` (the UniProt
+any source (`'uniprot'`, `'decodertcr'`, `'motifatlas'`). The bundled one is two files, `mhc_uniprot.fasta` (the UniProt
 sequences, exactly as UniProt serves them) and `mhc_annotations.csv` (everything else),
 joined here; `bundled_mhc_table_path()` is the CSV, and passing it as `path=` gives the
 same joined table. Another `path=` reads a file of the same shape. One table of 262
@@ -410,9 +427,10 @@ What `mhc_sequence(region=...)` uses internally. Not re-exported at the top leve
 What MHC gene a sequence is, its IMGT numbering, and where its groove helices are — the
 structural counterpart to `mhc_sequence`'s lookup.
 
-Out, one row per sequence: `gene` (`'A'`, `'DRB1'`, `'B2M'`, …), `allele` (closest bundled
+Out, one row per sequence: `gene` (`'A'`, `'DRB1'`, `'B2M'`, …), `allele` (the closest
 allele), `allele_identity` (share of identical residues between your sequence and that
-allele over the part that aligns), `mhc_class`, `score` (alignment score per residue), `span` (1-based range of the
+allele over the part that aligns), `allele_ties` (how many other alleles are as close),
+`allele_source` (`'motifatlas'` or `'uniprot'`), `mhc_class`, `score` (alignment score per residue), `span` (1-based range of the
 MHC part), `domains` (the G domains found, in order) and `domain_spans`, `helix` (1-based
 ranges of the groove-helix residues), `regions` and the four region columns, `error`.
 
@@ -498,10 +516,19 @@ and MHC α3 / β2 domains) come from IMGT's
 `tcrkit.cdomain.number_cdomain(seq, genes=['B2M'])` numbers one sequence directly (no
 offset).
 
-> **The allele is approximate.** Only 184 alleles are searched, so `allele` is the closest
-> of those, not a typing result. `allele_identity` = 1.0 means an exact match over the
-> aligned part; lower means your allele is not bundled. The gene call is reliable. Gene matching always uses the bundled reference, so a sequence from
-> any source - DecoderTCR's, or your own - is annotated the same way.
+> **Where the allele comes from** (`allele_source=`). By default (`'motifatlas'`), the
+> gene is found on the bundled reference first, then only that gene's MHC Motif Atlas
+> alleles are searched: an allele whose sequence your chain contains (or that contains
+> your chain) is identical; otherwise the 10 alleles sharing the most 4-mers are aligned.
+> That is under a millisecond per chain for an exact match. Class I is compared over the
+> groove, all the Motif Atlas has, so alleles that differ only outside it tie
+> (`allele_ties`); of tied alleles one with ligand data is reported first. On tcrkit's
+> 160 human alleles it returns the same allele 159 times, and an identical-groove one the
+> other. The Motif Atlas is downloaded on first use; offline (or with
+> `TCRKIT_NO_DOWNLOAD=1`), and for genes it lacks (B2M, most other species), the allele
+> is the closest of the 184 bundled ones, `allele_source='uniprot'`, with a warning when
+> it could not be had. `allele_source='uniprot'` always uses the bundled ones, as before
+> 0.1.11. The gene, numbering, helices and membrane regions are the same either way.
 
 `helix=` picks how helices are found:
 
@@ -602,6 +629,39 @@ TCR ranges are from IMGT's [FR/CDR definition](https://www.imgt.org/IMGTScientif
 MHC ranges from IMGT's [G-DOMAIN page](https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/G-DOMAIN/Gdomains.html).
 The `helix` column rows are tcrkit's `helix='imgt'` residues.
 
+### Peptides: `peptide_anchors(peptides, alleles=None, ...)` · `peptide_motif(allele, length=9)` · `plot_motif(allele, length=9, ax=None)`
+
+From the MHC Motif Atlas ligands (about 483,000 class I peptides of 135 alleles and
+600,000 class II peptides of 95 alleles or pairs; downloaded on first use):
+
+```python
+tcrkit.peptide_anchors(['GILGFVFTL', 'PKYVKQNTLKLAT'], ['HLA-A*02:01', 'DRB1*01:01'])
+#          peptide       allele       core         anchors anchor_residues
+# 0      GILGFVFTL  HLA-A*02:01        NaN          P2, P9            I, L
+# 1  PKYVKQNTLKLAT   DRB1*01:01  YVKQNTLKL  P1, P4, P6, P9      Y, Q, T, L
+```
+
+**`peptide_anchors`** gives the probable anchor positions statistically. For class I,
+the allele's ligands of the peptide's length make a motif; for class II, the binding
+cores of its ligands do, and the peptide's core is the 9-mer that fits that motif best,
+or the recorded one if the peptide is a Motif Atlas ligand itself. Anchors are the motif
+positions whose information content is at least half the highest (`ANCHOR_FRACTION`):
+usually P2 and the last position for class I, and P1, P4, P6 and P9 of the core for
+class II. Out: `motif_allele` (the ligand set used), `mhc_class`, `n_ligands`, `core` /
+`core_start` (class II), `anchors` (motif positions), `anchor_positions` (1-based in the
+peptide), `anchor_residues`, `anchor_ic` (bits) and `error`. It needs `MIN_LIGANDS` (50)
+ligands: an allele without ligand data, or with too few of that length, gets an `error`
+rather than a guess. DP and DQ ligands are per pair: name the pair
+(`'DQA1*05:01__DQB1*02:01'`), or a chain that is in only one. The class II `__reverse`
+sets (peptides bound in reverse) are left out.
+
+**`peptide_motif`** is the motif itself: one row per position, one column per amino acid,
+each frequency divided by that amino acid's frequency in all ligands of the class and
+renormalized, as the Motif Atlas does (with the ligands standing in for the proteome),
+plus `ic`, the information content in bits. **`plot_motif`** draws it as a logo (letter
+height = frequency × information content) and needs `pip install 'tcrkit[logos]'`
+(logomaker).
+
 ---
 
 ## 6. The whole complex
@@ -688,13 +748,26 @@ over chains (tcrdist3's paired distance). `long=True` gives one row per pair (`i
 
 ---
 
+## 8. Downloaded data: `download_data(sources=None, species=('human', 'mouse'), force=False)`
+
+Everything tcrkit fetches on first use, in one call: `'stitchr'` (IMGT germlines for
+`stitch`, through `stitchrdl`, per species), `'motifatlas'` (sequences and ligands,
+names normalized once) and `'decodertcr'`. Only what is missing, unless `force=True`.
+One row per item: `source`, `species`, `status` (`'downloaded'`, `'cached'`, `'failed'`),
+`path`, `error`; a failure is reported, not raised. Run it before going offline (compute
+nodes without internet). The cache is `$TCRKIT_CACHE` (default `~/.cache/tcrkit`);
+`TCRKIT_NO_DOWNLOAD=1` stops all downloads. CLI: `tcrkit download [--only ...]
+[--species ...] [--force]`.
+
+---
+
 ## Command line
 
-Ten subcommands mirror the Python API:
+Eleven subcommands mirror the Python API:
 
 ```
 tcrkit stitch | anarci | normalize-tcr | normalize-mhc | add-cdr3-junctions
-       annotate-mhc | annotate
+       annotate-mhc | annotate | download
        diversity | morisita-horn | generation-probability
        docs | skills
 ```

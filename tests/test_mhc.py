@@ -48,7 +48,8 @@ def test_gene_domains():
 
 def test_one_row_per_sequence(wide):
     assert list(wide.index) == ['A2', '4MS8', 'IE', 'DRA', 'b2m', 'tcr', 'pep']
-    assert list(wide.columns) == ['sequence', 'gene', 'allele', 'allele_identity', 'mhc_class',
+    assert list(wide.columns) == ['sequence', 'gene', 'allele', 'allele_identity',
+                                  'allele_ties', 'allele_source', 'mhc_class',
                                   'score', 'span',
                                   'domains', 'domain_spans', 'helix', 'regions',
                                   'signal_peptide', 'extracellular', 'transmembrane',

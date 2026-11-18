@@ -61,6 +61,20 @@ Cite: Lai B, Englund M, Bharanikumar R, Nocedal I, Davariashtiyani A, Perera J, 
 DecoderTCR: Compositional Pretraining and Entropy-Guided Decoding for TCR-pMHC
 Interactions. *ICML* (2026). https://openreview.net/pdf?id=yzes8qBM70
 
+## MHC Motif Atlas (not shipped)
+
+`annotate_mhc`'s alleles (by default), `source='motifatlas'`, `peptide_anchors` and
+`peptide_motif` use the [MHC Motif Atlas](http://mhcmotifatlas.org)'s four data files,
+downloaded on first use into `~/.cache/tcrkit/motifatlas/` (`manifest.json` there records
+the URL, date and SHA-256 of each): the class I and class II sequences (13,966 class I
+grooves, 865 class II chains) and their mass-spectrometry ligands (with the class II
+binding cores). Names are normalized once into `table.csv`; class II chains get the
+topology of the matching bundled allele.
+
+Cite: Tadros DM, Eggenschwiler S, Racle J, Gfeller D. The MHC Motif Atlas: a database of
+MHC binding specificities and ligands. *Nucleic Acids Research* 51(D1), D428-D437 (2023).
+https://doi.org/10.1093/nar/gkac965
+
 ## imgt_gdomains.csv
 
 Parsed from IMGT's G-DOMAIN page

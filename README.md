@@ -30,6 +30,7 @@ Python library or from the command line.
 | `mhc_sequence`, `list_mhc` | MHC allele → protein sequence, whole or by membrane region | bundled UniProt table |
 | `annotate` | any sequence → its chain type (TCR, MHC, B2M, peptide) and that kind's annotation | `anarci` + `annotate_mhc` |
 | `annotate_mhc` | MHC sequence → gene, closest allele, IMGT G-domain numbering, groove helices; with `domains=True` also α3 / β2 / B2M (IMGT C-like) | bundled table + IMGT G-DOMAIN |
+| `peptide_anchors`, `peptide_motif`, `plot_motif` | a peptide's probable anchor positions on an allele; the allele's binding motif and logo | [MHC Motif Atlas](http://mhcmotifatlas.org) ligands |
 | `imgt_regions`, `print_residues` | the IMGT ranges of CDRs and helices; a sequence printed with its annotation | IMGT |
 | `build_tcr_pmhc` | a table of TCR pairs + MHC → the whole complex, self-checked | all of the above |
 | `diversity`, `morisita_horn`, `generation_probability`, `tcrdist` | repertoire metrics | scikit-bio, OLGA, tcrdist3 |
@@ -46,10 +47,12 @@ IMGT numbering, so their positions agree.
 pip install git+https://github.com/akdslab/tcrkit.git
 pip install 'tcrkit[metrics] @ git+https://github.com/akdslab/tcrkit.git'   # with the metrics
 
-stitchrdl -s human        # once per environment, for stitch (add -s mouse if needed)
+tcrkit download           # once: Stitchr germlines, MHC Motif Atlas, DecoderTCR data
 ```
 
-Everything else ships with the package, including the MHC sequences.
+The MHC sequences tcrkit numbers chains against ship with the package. The rest is
+downloaded on first use and cached (`~/.cache/tcrkit`); `tcrkit download` gets it all at
+once, e.g. before moving to a machine without internet.
 
 ## A quick tour
 
@@ -117,8 +120,21 @@ tcrkit.annotate_mhc(a2, domains=True, show=True)                    # print it, 
 
 ![annotate_mhc: gene, allele, groove domains and helices](docs/images/annotate_mhc.png)
 
-Trust the `gene`; treat the `allele` as approximate. It is the closest of the 184 bundled
-alleles, and `allele_identity` below 1.0 means yours is not among them.
+The `allele` is the closest of that gene's alleles in the [MHC Motif Atlas](http://mhcmotifatlas.org)
+(14,826 in all, downloaded on first use; `allele_source='uniprot'` uses the 184 bundled ones).
+`allele_identity` below 1.0 means yours is not among them, and `allele_ties` counts the
+alleles that are just as close: class I is compared over the groove only.
+
+**Which peptide residues anchor it?** From the Motif Atlas ligands of that allele:
+
+```python
+tcrkit.peptide_anchors(['GILGFVFTL', 'PKYVKQNTLKLAT'], ['HLA-A*02:01', 'DRB1*01:01'])
+#          peptide       allele       core         anchors anchor_residues
+# 0      GILGFVFTL  HLA-A*02:01        NaN          P2, P9            I, L
+# 1  PKYVKQNTLKLAT   DRB1*01:01  YVKQNTLKL  P1, P4, P6, P9      Y, Q, T, L
+
+tcrkit.plot_motif('HLA-A*02:01')       # its 9-mer logo (pip install 'tcrkit[logos]')
+```
 
 **Don't know what a sequence is?** `annotate` tells you, and annotates it as its kind:
 
@@ -179,9 +195,10 @@ tcrkit --help
   (TCR, MHC, metrics) into `~/.claude/skills`.
 * [notebooks/tcrkit_showcase.ipynb](notebooks/tcrkit_showcase.ipynb): a runnable tour.
   [notebooks/tcrkit_metrics.ipynb](notebooks/tcrkit_metrics.ipynb) covers the metrics.
-* MHC sequences can also come from DecoderTCR's HLA reference:
-  `mhc_sequence(..., source='decodertcr')`, fetched once and cached. A region means the
-  same stretch of the chain with either source.
+* MHC sequences can also come from DecoderTCR's HLA reference
+  (`mhc_sequence(..., source='decodertcr')`) or the MHC Motif Atlas (`source='motifatlas'`;
+  class I as the groove only, `region='groove'`), fetched once and cached. A region means
+  the same stretch of the chain whatever the source.
 
 ## Data sources — please cite
 
@@ -190,6 +207,7 @@ The code is MIT, but the bundled data is other people's work:
 | data | used by | cite |
 |---|---|---|
 | MHC protein sequences | `mhc_sequence`, `annotate_mhc` | [UniProt](https://www.uniprot.org), *NAR* 2025 (CC BY 4.0) |
+| MHC alleles and ligands (not shipped) | `annotate_mhc` alleles, `mhc_sequence(source='motifatlas')`, `peptide_anchors`, `peptide_motif` | [MHC Motif Atlas](http://mhcmotifatlas.org), Tadros et al., [*NAR* 51:D428 (2023)](https://doi.org/10.1093/nar/gkac965) |
 | HLA sequences (opt-in, not shipped) | `mhc_sequence(source='decodertcr')` | [DecoderTCR](https://github.com/Biohub/DecoderTCR), Lai et al., *ICML* 2026 (MIT) |
 | membrane topology | `mhc_sequence(region=...)`, `annotate_mhc` | DeepTMHMM, Hallgren et al., [*bioRxiv* 2022](https://doi.org/10.1101/2022.04.08.487609) |
 | IMGT G-domain numbering, groove helices | `annotate_mhc`, `imgt_regions` | IMGT, Lefranc et al., *Dev. Comp. Immunol.* 29:917 (2005) (CC BY 4.0); [MHC Motif Atlas](http://mhcmotifatlas.org) |

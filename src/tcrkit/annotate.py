@@ -58,7 +58,7 @@ def _classify(seq, tcr_type, mhc_gene, why_not_tcr, why_not_mhc):
 
 def annotate(sequences, per_residue: bool = False, helix: str = 'imgt',
              col_mapping=None, squeeze: bool = False, progress_bar: bool = True,
-             **anarci_kwargs) -> pd.DataFrame:
+             allele_source: str = 'motifatlas', **anarci_kwargs) -> pd.DataFrame:
     """What each sequence is, and its annotation, without saying the chain type first.
 
     Every sequence goes through :func:`tcrkit.anarci` (TCR and antibody V domains) and
@@ -81,6 +81,8 @@ def annotate(sequences, per_residue: bool = False, helix: str = 'imgt',
         col_mapping: where the sequence lives in a frame, e.g. ``{'sequence': 'seq'}``.
         squeeze: return the plain result instead of a frame.
         progress_bar: show progress for the ANARCI pass.
+        allele_source: where an MHC chain's ``allele`` comes from, as in
+            :func:`tcrkit.annotate_mhc`: the MHC Motif Atlas (default) or ``'uniprot'``.
         **anarci_kwargs: passed to :func:`tcrkit.anarci`. ANARCI picks among every chain
             type it knows, so an alpha chain can come back as ``TCR_delta``; pass
             ``allow={'A', 'B'}`` if you are looking for alpha/beta chains.
@@ -103,7 +105,8 @@ def annotate(sequences, per_residue: bool = False, helix: str = 'imgt',
     if per_residue:
         tcr = anarci(named, per_residue=True, domains=True, progress_bar=progress_bar,
                      **anarci_kwargs)
-        mhc = annotate_mhc(named, per_residue=True, domains=True, helix=helix)
+        mhc = annotate_mhc(named, per_residue=True, domains=True, helix=helix,
+                           allele_source=allele_source)
         parts = []
         for idx, seq in named.items():
             t, m = tcr[tcr.index == idx], mhc[mhc.index == idx]
@@ -123,7 +126,7 @@ def annotate(sequences, per_residue: bool = False, helix: str = 'imgt',
         return _squeeze(res) if squeeze else res
 
     tcr = anarci(named, domains=True, progress_bar=progress_bar, **anarci_kwargs)
-    mhc = annotate_mhc(named, domains=True, helix=helix)
+    mhc = annotate_mhc(named, domains=True, helix=helix, allele_source=allele_source)
     rows = []
     for idx, seq in named.items():
         t, m = tcr.loc[idx], mhc.loc[idx]

@@ -26,7 +26,7 @@ from .gdomain import _MIN_SCORE, GDOMAINS, HELIX_METHODS, number_gdomains, tpm_b
 __all__ = ['annotate_mhc', 'gene_domains', 'best_mhc', 'mhc_chain', 'mhc_span',
            'mhc_species', 'mhc_database', 'B2M_SEQUENCE', 'HELIX_METHODS', 'COLLAPSIBLE']
 
-_COLUMNS = ['gene', 'allele', 'allele_identity', 'mhc_class', 'score', 'span', 'domains', 'domain_spans',
+_COLUMNS = ['gene', 'allele', 'allele_identity', 'allele_ties', 'allele_source', 'mhc_class', 'score', 'span', 'domains', 'domain_spans',
             'helix', 'regions', *_TOPOLOGY_COLS, ERROR_COL]
 _RESIDUE_COLUMNS = ['position', 'aa', 'gene', 'allele', 'domain', 'imgt', 'region',
                     'helix', 'topology']
@@ -100,8 +100,14 @@ def mhc_species(allele: str | None) -> str | None:
     ('human', None)
 
     The species of a chain's closest allele: ``mhc_species(best_mhc(sequence)[1])``.
+    An allele of the MHC Motif Atlas (what :func:`annotate_mhc` reports by default) is
+    looked up there too, once its table is cached.
     """
-    return _allele_species().get(allele)
+    found = _allele_species().get(allele)
+    if found is None and isinstance(allele, str):
+        from .motifatlas import species_of
+        found = species_of(allele)
+    return found
 
 
 @lru_cache(maxsize=1)
@@ -366,8 +372,13 @@ def _number_the_b2m_leader(num: pd.DataFrame, labels) -> pd.DataFrame:
     return num.assign(imgt=lead + list(num['imgt'].iloc[first:]))
 
 
+#: Where :func:`annotate_mhc` takes the ``allele`` from.
+ALLELE_SOURCES = ('motifatlas', 'uniprot')
+
+
 def _annotate_one(seq: str, helix: str, mark_regions: bool = False,
-                  c_like: bool = False) -> tuple[dict, pd.DataFrame]:
+                  c_like: bool = False, allele_source: str = 'motifatlas'
+                  ) -> tuple[dict, pd.DataFrame]:
     """``(row of the wide table, per-residue table)`` for one cleaned sequence."""
     if len(seq) < _MHC_MIN_LENGTH:
         return ({ERROR_COL: f'too short for an MHC chain ({len(seq)} residues, needs '
@@ -381,13 +392,20 @@ def _annotate_one(seq: str, helix: str, mark_regions: bool = False,
         start, end, identity = _match_allele(seq, ref['sequence'])
         cls = ref['class']
         rec.update(gene=gene, allele=allele, allele_identity=round(identity, 3),
+                   allele_source='uniprot',
                    mhc_class='-' if gene == 'B2M' else {1: 'I', 2: 'II'}[cls],
                    span=f'{start + 1}-{end}')
+        if allele_source == 'motifatlas' and gene != 'B2M':
+            from .motifatlas import allele_for
+            hit = allele_for(seq, gene, mhc_species(allele))
+            if hit is not None:
+                rec.update(allele=hit[0], allele_identity=hit[1], allele_ties=hit[2],
+                           allele_source='motifatlas')
     else:
-        gene = None
+        gene, allele = None, None
 
-    # the membrane regions, carried over from whichever allele matched
-    _, labels, spans = _topology_of(seq, rec.get('allele'))
+    # the membrane regions, carried over from the bundled allele that matched
+    _, labels, spans = _topology_of(seq, allele)
     rec['regions'] = ', '.join(name for name, _ in _TOPOLOGY if spans.get(name)) or None
     if mark_regions:
         rec['topology_seq'] = ''.join(TOPOLOGY_LETTERS.get(x, '-') for x in labels)
@@ -437,11 +455,12 @@ COLLAPSIBLE = ('domain', 'region', 'helix', 'topology')
 def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
                  mark_regions: bool = False, col_mapping=None,
                  squeeze: bool = False, collapse=None, domains: bool = False,
-                 show=False) -> pd.DataFrame:
+                 show=False, allele_source: str = 'motifatlas') -> pd.DataFrame:
     """Which MHC gene each sequence is, its IMGT numbering and its groove helices.
 
-    Each sequence is matched to the bundled alleles for its gene and closest allele, then
-    its G domains are numbered on IMGT's G-DOMAIN scheme:
+    Each sequence is matched to the bundled alleles for its gene, then to that gene's
+    MHC Motif Atlas alleles for its closest allele, and its G domains are numbered on
+    IMGT's G-DOMAIN scheme:
     https://www.imgt.org/IMGTrepertoireMH/Proteins/protein/G-DOMAIN/Gdomains.html
 
     >>> out = annotate_mhc('GSHSMRYFFTSVSRPGRGEPRFIAVGYVDDTQFVRFDSDAASQRMEPRAPWIEQEG'
@@ -473,10 +492,21 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
             ``I``/``-``), as in :func:`tcrkit.mhc_sequence`.
         col_mapping: where the sequence lives in a frame, e.g. ``{'sequence': 'mhc_seq'}``.
         squeeze: return the plain result instead of a frame.
+        allele_source: where ``allele`` comes from. ``'motifatlas'`` (default): the
+            closest of the gene's MHC Motif Atlas alleles (13,966 class I, 865 class II;
+            :func:`tcrkit.motifatlas.closest_allele`), downloaded on first use. Class I
+            is compared over the groove, all the Motif Atlas has. Falls back to the
+            bundled reference, with a warning, when the Motif Atlas cannot be had, and
+            for genes it lacks (B2M, most non-human). ``'uniprot'``: the closest
+            bundled allele, as before 0.1.11. The gene, numbering, helices and
+            membrane regions do not depend on it.
 
     Returns:
-        Per sequence: ``gene``, ``allele`` (closest bundled one - the gene is reliable,
+        Per sequence: ``gene``, ``allele`` (the closest allele - the gene is reliable,
         the allele approximate), ``allele_identity`` (1.0 = identical where aligned),
+        ``allele_ties`` (how many other Motif Atlas alleles are as close; they share
+        that stretch of sequence), ``allele_source`` (``'motifatlas'`` or
+        ``'uniprot'``),
         ``mhc_class``, ``score``, ``span``, ``domains``, ``domain_spans``, ``helix``
         (1-based ranges), ``regions`` plus one range column per membrane region, and
         ``error``.
@@ -492,6 +522,9 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
     """
     if helix not in HELIX_METHODS:
         raise ValueError(f'helix must be one of {HELIX_METHODS}, got {helix!r}')
+    if allele_source not in ALLELE_SOURCES:
+        raise ValueError(f'allele_source must be one of {ALLELE_SOURCES}, '
+                         f'got {allele_source!r}')
     collapse = collapse_columns(collapse, COLLAPSIBLE, default=['domain', 'region'])
     if collapse is not None:
         per_residue = True
@@ -503,7 +536,7 @@ def annotate_mhc(sequences, helix: str = 'imgt', per_residue: bool = False,
         if not seq or not re.fullmatch(r'[A-Z]+', seq):
             recs.append({ERROR_COL: 'not an amino-acid sequence'})
             continue
-        rec, num = _annotate_one(seq, helix, mark_regions, domains)
+        rec, num = _annotate_one(seq, helix, mark_regions, domains, allele_source)
         recs.append(rec)
         if per_residue or show:
             part = num.drop(columns='template')

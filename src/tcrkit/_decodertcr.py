@@ -108,7 +108,7 @@ def load_decodertcr_table(force_download: bool = False) -> pd.DataFrame:
     table['pairs'] = table['pairs'].map(', '.join)
 
     # topology from tcrkit's own reference, carried over by alignment
-    ann = annotate_mhc(dict(zip(table['allele'], table['sequence'])))
+    ann = annotate_mhc(dict(zip(table['allele'], table['sequence'])), allele_source='uniprot')
     for region, col in (('signal_peptide', 'signal_spans'), ('extracellular', 'outside_spans'),
                         ('transmembrane', 'tmhelix_spans'), ('cytoplasmic', 'inside_spans')):
         table[col] = [_as_spans(v) for v in ann[region]]

@@ -52,9 +52,11 @@ __all__ = ['mhc_sequence', 'load_mhc_table', 'list_mhc', 'bundled_mhc_table_path
 
 _DATA = Path(__file__).resolve().parent / 'data'
 
-#: Where MHC sequences can come from: ``'uniprot'`` (the bundled reference, default)
-#: and ``'decodertcr'`` (DecoderTCR's HLA reference, fetched on first use).
-MHC_SOURCES = ('uniprot', 'decodertcr')
+#: Where MHC sequences can come from: ``'uniprot'`` (the bundled reference, default),
+#: ``'decodertcr'`` (DecoderTCR's HLA reference) and ``'motifatlas'`` (the MHC Motif
+#: Atlas: 13,966 class I grooves, 865 class II chains); the last two are fetched on
+#: first use.
+MHC_SOURCES = ('uniprot', 'decodertcr', 'motifatlas')
 
 
 def bundled_mhc_table_path() -> Path:
@@ -145,9 +147,11 @@ def load_mhc_table(path=None, source: str = 'uniprot') -> pd.DataFrame:
         path: read another table of the same shape (a CSV with ``allele`` and
             ``sequence`` columns) instead. The bundled table's own path
             (:func:`bundled_mhc_table_path`) gives the bundled reference.
-        source: ``'uniprot'`` (default) or ``'decodertcr'`` - DecoderTCR's HLA
-            reference, 87 human chains, downloaded on first use and cached
-            (:func:`tcrkit._decodertcr.load_decodertcr_table`). Ignored with `path`.
+        source: ``'uniprot'`` (default), ``'decodertcr'`` - DecoderTCR's HLA
+            reference, 87 human chains (:func:`tcrkit._decodertcr.load_decodertcr_table`)
+            - or ``'motifatlas'``, the MHC Motif Atlas's 14,831 alleles
+            (:func:`tcrkit.motifatlas.load_motifatlas_table`; class I as the groove
+            only). Both downloaded on first use and cached. Ignored with `path`.
     """
     if path is not None and Path(path).resolve() != bundled_mhc_table_path().resolve():
         path = Path(path)
@@ -159,6 +163,9 @@ def load_mhc_table(path=None, source: str = 'uniprot') -> pd.DataFrame:
     if source == 'decodertcr':
         from ._decodertcr import load_decodertcr_table
         return load_decodertcr_table()
+    if source == 'motifatlas':
+        from .motifatlas import load_motifatlas_table
+        return load_motifatlas_table()
     return _bundled_table()
 
 
@@ -175,7 +182,8 @@ def list_mhc(what: str = 'alleles', source: str = 'uniprot', species=None) -> pd
             ``pair`` (DecoderTCR's key), ``mhc_a`` / ``mhc_b`` (tcrkit's allele names),
             ``mhc_class``. The bundled reference stores single chains, so pairs need
             ``source='decodertcr'``.
-        source: ``'uniprot'`` (default) or ``'decodertcr'`` (downloaded on first use).
+        source: ``'uniprot'`` (default), ``'decodertcr'`` or ``'motifatlas'`` (both
+            downloaded on first use).
         species: only these species, e.g. ``'human'`` or ``['human', 'mouse']``; the
             common name (``'pig'``) or the scientific one (``'Sus scrofa'``), any case.
             Default: all.
@@ -233,9 +241,11 @@ TOPOLOGY = {
 }
 
 #: What ``region=`` accepts: the four topology regions, plus ``'mature'`` (the chain
-#: after its signal peptide is cleaved, which is what is actually expressed) and
-#: ``'full'`` (the precursor as deposited). Common synonyms are accepted too.
-REGIONS = (*TOPOLOGY, 'mature', 'full')
+#: after its signal peptide is cleaved, which is what is actually expressed),
+#: ``'full'`` (the precursor as deposited) and ``'groove'`` (the peptide-binding G
+#: domains: class I alpha1 + alpha2, class II alpha1 or beta1, from the first to the
+#: last IMGT G-domain residue). Common synonyms are accepted too.
+REGIONS = (*TOPOLOGY, 'mature', 'full', 'groove')
 
 #: One letter per region in the ``topology_seq`` string, as DeepTMHMM writes them.
 TOPOLOGY_LETTERS = {'signal_peptide': 'S', 'extracellular': 'O',
@@ -247,6 +257,8 @@ _REGION_ALIASES = {
     'tm': 'transmembrane', 'tmhelix': 'transmembrane',
     'intracellular': 'cytoplasmic', 'inside': 'cytoplasmic', 'tail': 'cytoplasmic',
     'precursor': 'full',
+    'g_domain': 'groove', 'g-domain': 'groove', 'binding_groove': 'groove',
+    'peptide_binding': 'groove',
 }
 
 
@@ -292,10 +304,44 @@ def _named(spans) -> str | None:
     return ', '.join(present) if present else None
 
 
+@lru_cache(maxsize=4096)
+def _groove_of(seq: str, gene) -> tuple:
+    """``(first, last)`` 1-based of the G domains of `seq`, or () if it has none."""
+    from .gdomain import number_gdomains
+    from .mhc import gene_domains
+
+    domains = gene_domains(gene if isinstance(gene, str) else None)
+    if not domains:
+        return ()
+    num = number_gdomains(seq, domains)
+    inside = [i for i, d in enumerate(num['domain']) if d != '-']
+    return (inside[0] + 1, inside[-1] + 1) if inside else ()
+
+
+def _unavailable(row, region: str) -> str | None:
+    """Why a row cannot give `region`, if it is because the source lacks that part."""
+    if row.get('covers') == 'groove' and region != 'groove':
+        return (f"{row.get('source', 'this source')} has only the groove (alpha1 + "
+                f"alpha2) of class I chains; use region='groove'")
+    if (row.get('source') == 'motifatlas' and region not in ('full', 'groove')
+            and not _spans(row.get('outside_spans'))):
+        return ('no membrane topology could be carried over to this chain; '
+                "region='full' or 'groove' only")
+    return None
+
+
 def _region_index(row, region: str) -> list:
     """The 0-based positions of `region` in a reference row's sequence."""
     seq = row.get('sequence')
     n = len(seq) if isinstance(seq, str) else 0
+    if _unavailable(row, region):
+        return []
+    if region == 'groove':
+        spans = _spans(row.get('groove_spans'))
+        if not spans and n:
+            span = _groove_of(seq, row.get('gene'))
+            spans = [span] if span else []
+        return [i for start, end in spans for i in range(max(0, start - 1), min(end, n))]
     if region == 'full':
         return list(range(n))
     if region == 'mature':
@@ -333,6 +379,15 @@ def region_of(row, region: str = 'extracellular'):
             ''.join(TOPOLOGY_LETTERS.get(x, '-') for x in labels))
 
 
+class _SequenceMap(dict):
+    """``{allele: (sequence, spans, topology_seq)}``, with ``reasons`` for the alleles a
+    region is missing from because the source lacks that part of the chain."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.reasons: dict[str, str] = {}
+
+
 def _sequence_map(table=None, region: str = 'extracellular', source: str = 'uniprot') -> dict:
     """``{allele -> sequence}`` for a reference, bundled or your own.
 
@@ -354,9 +409,18 @@ def _sequence_map(table=None, region: str = 'extracellular', source: str = 'unip
         raise ValueError(f'An MHC table needs {sorted(missing)} column(s); '
                          f'got {list(tab.columns)}.')
 
-    seqs = {}                            # allele -> (sequence, spans, topology_seq)
+    seqs = _SequenceMap()                # allele -> (sequence, spans, topology_seq)
     for _, r in tab.iterrows():
-        seqs[str(r['allele']).strip()] = region_of(r, region)
+        key = str(r['allele']).strip()
+        seqs[key] = region_of(r, region)
+        why = _unavailable(r, _REGION_ALIASES.get(str(region).lower(), region))
+        if why:
+            seqs.reasons[key] = why
+    if table is None and source == 'motifatlas':
+        # the Motif Atlas has no B2M: class I pairs take the bundled one
+        for key, value in _sequence_map(region=region).items():
+            if key.startswith('B2M'):
+                seqs.setdefault(key, value)
     if normalize_keys:
         written = list(seqs)
         for raw, key in zip(written, normalize_mhc(written, errors='coerce')['allele']):
@@ -391,7 +455,8 @@ def mhc_sequence(alleles, paired: bool = False, region: str = 'extracellular',
             ``'extracellular'`` (the default - past the signal peptide, before the
             membrane, i.e. the part outside the cell), ``'full'`` (the chain as
             deposited), ``'mature'`` (everything after the signal peptide),
-            ``'signal'``, ``'transmembrane'`` or ``'cytoplasmic'``. An allele with no
+            ``'signal'``, ``'transmembrane'``, ``'cytoplasmic'`` or ``'groove'`` (the
+            peptide-binding G domains). An allele with no
             topology annotation falls back to its whole sequence; the ``topology``
             column says which were annotated.
         mark_regions: add ``topology_seq``, a string as long as ``sequence`` with one
@@ -405,9 +470,12 @@ def mhc_sequence(alleles, paired: bool = False, region: str = 'extracellular',
             normalized, so they need not already be in the compact form.
         squeeze: return the plain result instead of a frame.
         source: where the sequences come from when `table` is not given:
-            ``'uniprot'`` (default, the bundled reference) or ``'decodertcr'``
-            (DecoderTCR's HLA reference: downloaded on first use, then cached). Regions
-            mean the same thing for both - see :data:`MHC_SOURCES`.
+            ``'uniprot'`` (default, the bundled reference), ``'decodertcr'``
+            (DecoderTCR's HLA reference) or ``'motifatlas'`` (the MHC Motif Atlas; its
+            class I chains are only the groove, so only ``region='groove'`` works for
+            them, and B2M comes from the bundled reference). Both downloaded on first
+            use, then cached. Regions mean the same thing for all - see
+            :data:`MHC_SOURCES`.
         **kwargs: forwarded to :func:`normalize_mhc` (e.g. ``restrict_allele_fields``).
 
     Returns:
@@ -453,7 +521,8 @@ def mhc_sequence(alleles, paired: bool = False, region: str = 'extracellular',
         """
         for candidate in (key, raw):
             if isinstance(candidate, str) and candidate.strip() in seqs:
-                return (*seqs[candidate.strip()], None)
+                return (*seqs[candidate.strip()],
+                        getattr(seqs, 'reasons', {}).get(candidate.strip()))
         if key is None or (isinstance(key, float) and pd.isna(key)):
             return None, {}, None, None
         return None, {}, None, f'{key!r} not in the reference'

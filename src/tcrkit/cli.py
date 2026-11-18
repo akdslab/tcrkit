@@ -421,7 +421,8 @@ def _cmd_annotate_mhc(args):
         seqs = list(args.seq)
     residues = args.per_residue or bool(args.collapse)
     out = annotate_mhc(seqs, helix=args.helix, per_residue=args.per_residue,
-                       collapse=args.collapse, domains=args.domains)
+                       collapse=args.collapse, domains=args.domains,
+                       allele_source=args.allele_source)
     if not residues and not (args.out_csv or args.json):
         out = out.drop(columns=['sequence'])
     _emit(out, args, index=bool(args.in_csv) or residues)
@@ -450,6 +451,9 @@ def _add_annotate_mhc(sub):
     p.add_argument('--domains', action='store_true',
                    help='also number the C-LIKE domain (alpha3, alpha2 / beta2, B2M) '
                         'on IMGT C-LIKE + 1000')
+    p.add_argument('--allele-source', choices=['motifatlas', 'uniprot'], default='motifatlas',
+                   help='where the allele comes from: the MHC Motif Atlas (default, '
+                        'downloaded once) or the bundled UniProt alleles')
     p.add_argument('--in-csv', help='CSV/TSV with a column of sequences')
     p.add_argument('--seq-col', default='sequence', help='(default: sequence)')
     p.set_defaults(func=_cmd_annotate_mhc)
@@ -687,6 +691,27 @@ def _cmd_skills(args):
         print(f'{name:<16}{status}')
 
 
+def _cmd_download(args):
+    from .download import download_data
+    out = download_data(args.only, species=args.species, force=args.force)
+    print(out.fillna('').to_string(index=False))
+    args.exit_code = 0 if (out['status'] != 'failed').all() else 1
+
+
+def _add_download(sub):
+    p = sub.add_parser('download', help='download the data tcrkit fetches on first use',
+                       description='Stitchr germlines (stitchrdl), MHC Motif Atlas sequences '
+                                   'and ligands, DecoderTCR HLA reference. Only what is '
+                                   'missing, unless --force.')
+    p.add_argument('--only', nargs='+', choices=['stitchr', 'motifatlas', 'decodertcr'],
+                   help='just these (default: all)')
+    p.add_argument('--species', nargs='+', default=['human', 'mouse'],
+                   help='Stitchr species (default: human mouse)')
+    p.add_argument('--force', action='store_true', help='download again')
+    p.set_defaults(func=_cmd_download)
+    return p
+
+
 def _add_docs(sub):
     p = sub.add_parser('docs', help='the documentation pages',
                        description='Without a name, lists the pages and their files; with '
@@ -738,6 +763,7 @@ def build_parser():
                        help='suppress progress bars and summaries')
     _add_docs(sub)
     _add_skills(sub)
+    _add_download(sub)
     return parser
 
 
@@ -758,7 +784,7 @@ def main(argv=None):
         return 0
     except KeyboardInterrupt:
         return 130
-    return 0
+    return getattr(args, 'exit_code', 0)
 
 
 if __name__ == '__main__':

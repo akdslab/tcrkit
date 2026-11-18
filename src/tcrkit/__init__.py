@@ -9,6 +9,8 @@ The capabilities, all re-exported here:
     mhc_sequence    look up an MHC allele's protein sequence                (reference table)
     annotate_mhc    an MHC chain's gene, IMGT numbering and groove helices  (HLA + IMGT G-DOMAIN)
     annotate        any chain: TCR, MHC, B2M or peptide, and its annotation (anarci + annotate_mhc)
+    peptide_anchors a peptide's probable anchors on an allele, and its motif (MHC Motif Atlas)
+    download_data   fetch everything downloaded on first use (Stitchr, Motif Atlas, DecoderTCR)
     add_cdr3_junctions  put the IMGT junction residues back on a CDR3    (reference table)
 
 They live in these modules: ``stitch``, ``anarci``, ``normalize`` (allele *names*),
@@ -57,11 +59,13 @@ Note: importing a name here rebinds it over the submodule of the same name, so
 
 from __future__ import annotations
 
-__version__ = '0.1.10'
+__version__ = '0.1.11'
 
 from .anarci import CDR_IMGT_LOCS, anarci, read_sequences
 from .mhc import annotate_mhc
 from .annotate import annotate
+from .motifatlas import peptide_anchors, peptide_motif, plot_motif
+from .download import download_data
 from .cdr3_junction import (
     add_cdr3_junctions,
     build_junction_table,
@@ -95,6 +99,10 @@ __all__ = [
     'annotate_mhc',
     # any chain: what it is (TCR, MHC, B2M, peptide) and its annotation
     'annotate',
+    # peptides: probable anchors and binding motifs, from the MHC Motif Atlas ligands
+    'peptide_anchors', 'peptide_motif', 'plot_motif',
+    # fetch all the downloaded data at once (Stitchr, MHC Motif Atlas, DecoderTCR)
+    'download_data',
     # 5. cdr3 junctions
     'add_cdr3_junctions', 'junction_of', 'load_junction_table',
     'build_junction_table',

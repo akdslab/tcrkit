@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.11 - 2026-11-18
+
+- **`annotate_mhc`'s `allele` now comes from the MHC Motif Atlas** (14,826 alleles,
+  downloaded on first use): the gene is found first, then only its alleles are searched.
+  New `allele_ties` / `allele_source` columns; `allele_source='uniprot'` gives the
+  bundled alleles as before. Offline it falls back, with a warning. Numbering, helices
+  and regions are unchanged.
+- New `source='motifatlas'` for `mhc_sequence` / `load_mhc_table` / `list_mhc`, and
+  `region='groove'` for every source (class I Motif Atlas chains are only the groove).
+- New `peptide_anchors`, `peptide_motif` and `plot_motif` (`tcrkit[logos]`), from the
+  Motif Atlas ligands.
+- New `download_data` / `tcrkit download`: Stitchr, Motif Atlas and DecoderTCR at once.
+
 ## 0.1.10 - 2026-11-17
 
 - New `annotate`: what any sequence is (`chain_type`: TCR alpha / beta / gamma / delta,

@@ -18,6 +18,10 @@ tcrkit.annotate_mhc(seq, per_residue=True, domains=True)      # + alpha3/beta2/B
 tcrkit.annotate_mhc(seq, show=True)                           # prints it (colour) (print_residues); returns None
 tcrkit.list_mhc('genes', species='human'); tcrkit.list_mhc('pairs', source='decodertcr')
 tcrkit.imgt_regions()          # IMGT ranges of CDRs + helices, with sources (all_regions=True)
+tcrkit.mhc_sequence('B*51:250', source='motifatlas', region='groove')   # Motif Atlas: class I = groove only
+tcrkit.peptide_anchors('GILGFVFTL', 'HLA-A*02:01')   # probable anchors from Motif Atlas ligands ('P2, P9')
+tcrkit.peptide_motif('DRB1*01:01'); tcrkit.plot_motif('A*02:01')   # motif matrix + ic; logo needs tcrkit[logos]
+tcrkit.download_data()         # Stitchr, Motif Atlas, DecoderTCR at once (CLI: tcrkit download)
 ```
 
 - `region=`: `extracellular` (default), `full`, `mature`, `signal_peptide`,
@@ -26,8 +30,13 @@ tcrkit.imgt_regions()          # IMGT ranges of CDRs + helices, with sources (al
 - Sources: bundled = 186 human / mouse alleles from UniProt, plus 76 chains of TCR3d's
   20 other species (gene and species level: `mhc_species(best_mhc(seq)[1])`), shipped; `decodertcr` = 87 human chains
   / 88 pairs, downloaded once and cached (`~/.cache/tcrkit`). Misses are in `error`.
-- `annotate_mhc`: trust `gene`; `allele` is the closest bundled one
-  (`allele_identity` < 1.0 = not bundled). `helix='imgt'` (default) or `'tpm-bench'`.
+- `annotate_mhc`: trust `gene`; `allele` is the closest Motif Atlas allele of that gene
+  (`allele_source='motifatlas'`, default; downloaded once; offline / B2M / other species
+  fall back to the 184 bundled, `'uniprot'`). `allele_identity` < 1.0 = not among them;
+  `allele_ties` = equally close alleles (class I compared over the groove only).
+- `peptide_anchors`: anchors = motif positions with information content >= half the max,
+  from the allele's ligands (class I: same length; class II: 9-mer core found in the
+  peptide). Needs 50 ligands, else `error`; DP/DQ need the pair (`'DQA1*05:01__DQB1*02:01'`). `helix='imgt'` (default) or `'tpm-bench'`.
   The `helix` column (docking-angle residues, IMGT 50/52-86) is narrower than
   `region == 'helix'` (IMGT's whole 50-92). Use the `helix` column as the reference
   for the groove helices; "helix" elsewhere means the column.

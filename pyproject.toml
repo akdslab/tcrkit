@@ -28,6 +28,8 @@ tcrkit = "tcrkit.cli:main"
 # numba/llvmlite, tcrdist3 and scikit-bio pull in scipy/statsmodels/h5py - a lot of
 # weight for users who only want the sequence wrappers.
 metrics = ["olga>=1.2", "tcrdist3>=0.2", "scikit-bio>=0.6"]
+# Sequence logos of MHC Motif Atlas motifs (tcrkit.plot_motif).
+logos = ["logomaker>=0.8"]
 # Kept in sync with [dependency-groups].dev below, so `pip install -e '.[dev]'`
 # gets the same tooling `uv sync` does.
 dev = ["pytest>=8.0", "ipykernel>=6.29", "nbformat>=5.10", "nbconvert>=7.16",

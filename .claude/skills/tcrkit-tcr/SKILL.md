@@ -23,7 +23,7 @@ tcrkit.build_tcr_pmhc(df)                                 # all steps, self-chec
 tcrkit.annotate(seq)['chain_type']     # any chain: TCR_alpha/beta, MHC_I, MHC_II_alpha/beta, B2M, peptide
 ```
 
-- `stitch` needs `stitchrdl -s human` once; it repairs nothing - run
+- `stitch` needs `stitchrdl -s human` once (or `tcrkit download`); it repairs nothing - run
   `add_cdr3_junctions` first. `chain=` is not inferred (default beta). Output is
   `sequence_aa`; `include_nt=True` adds `sequence_nt` (also on `stitch_pair`,
   `build_tcr_pmhc` as `{chain}_sequence_nt`).
